@@ -1,21 +1,18 @@
-﻿/*global chrome*/
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { CssBaseline, IconButton, LinearProgress, linearProgressClasses, Snackbar, Tooltip, Typography } from '@mui/material';
 import { createTheme, styled, ThemeProvider } from '@mui/material/styles';
 import { Box } from '@mui/system';
 import { DataGrid, GridCloseIcon } from '@mui/x-data-grid';
-import { Button as BsButton } from 'react-bootstrap';
-import urlJoin from 'url-join';
+import { Alert, Button as BsButton, Spinner } from 'react-bootstrap';
 import './App.css';
 import buildColumns from './columns';
 import DisboxFileManager, { FILE_DELIMITER } from './disbox-file-manager';
-import { getAvailableFileName, pickLocationAsWritable } from './file-utils.js';
+import { encodeShareAttachmentUrls, getAvailableFileName, getFilesFromDataTransfer, pickLocationAsWritable } from './file-utils.js';
 import NavigationBar from './NavigationBar';
 import PathParts from './PathParts';
 import SearchBar from './SearchBar';
 import ThemeSwitch from './ThemeSwitch';
-import pako from 'pako';
 
 const darkTheme = createTheme({
   palette: {
@@ -47,7 +44,7 @@ const BorderLinearProgress = styled(LinearProgress)(({ theme }) => ({
 function App() {
   const [fileManager, setFileManager] = useState(null);
   const [rows, setRows] = useState([]);
-  const [theme, setTheme] = useState(true);
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') !== 'light');
   const [path, setPath] = useState(null);
   const [searchOptions, setSearchOptions] = useState([]);
   const [searchValue, setSearchValue] = useState('');
@@ -55,19 +52,33 @@ function App() {
   const [showProgress, setShowProgress] = useState(false);
   const [progressValue, setProgressValue] = useState(-1);
   const [snackbar, setSnackbar] = useState({ open: false, message: '' });
+  const [initError, setInitError] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  const showError = (message) => {
-    setSnackbar({ open: true, message });
-  };
+  const showError = useCallback((message) => {
+    setSnackbar({ open: true, message: String(message) });
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('theme', theme ? 'dark' : 'light');
+  }, [theme]);
 
   useEffect(() => {
     const webhookUrl = localStorage.getItem('webhookUrl');
     async function init() {
-      if (webhookUrl) {
+      if (!webhookUrl) {
+        setLoading(false);
+        return;
+      }
+      try {
         const manager = await DisboxFileManager.create(webhookUrl);
         setFileManager(manager);
         setRows(Object.values(manager.getChildren('')));
         setPath('');
+      } catch (e) {
+        setInitError(e?.message || String(e));
+      } finally {
+        setLoading(false);
       }
     }
     init();
@@ -134,23 +145,44 @@ function App() {
         return;
       }
 
-      for (const file of files) {
-        const fileName = await getAvailableFileName(fileManager, path, file.name);
-        const filePath = `${path}${FILE_DELIMITER}${fileName}`;
-        setCurrentAction(`Uploading ${fileName}`);
+      for (const item of files) {
+        const file = item.file || item;
+        const relativePath = String(item.path || file.webkitRelativePath || file.name || '').replace(/\\/g, '/');
+        if (!file || !relativePath) {
+          continue;
+        }
+
+        const parts = relativePath.split('/').filter(Boolean);
+        const originalName = parts.pop();
+        if (!originalName) {
+          continue;
+        }
+        const subdir = parts.join('/');
+        const targetDir = subdir ? `${path}${FILE_DELIMITER}${subdir}` : path;
+
         try {
+          if (subdir) {
+            await fileManager.ensureDirectory(targetDir);
+          }
+          const fileName = await getAvailableFileName(fileManager, targetDir, originalName);
+          const filePath = `${targetDir}${FILE_DELIMITER}${fileName}`;
+          setCurrentAction(`Uploading ${fileName}`);
           await fileManager.uploadFile(filePath, file, onProgress);
-          const row = fileManager.getFile(filePath);
-          if (row) {
-            addRow(row);
+
+          if ((targetDir.replace(/^\/+|\/+$/g, '') || '') === (String(path).replace(/^\/+|\/+$/g, '') || '')) {
+            const row = fileManager.getFile(filePath);
+            if (row) {
+              addRow(row);
+            }
           }
         } catch (e) {
-          showError(`Failed to upload ${fileName}: ${e}`);
+          showError(`Failed to upload ${originalName}: ${e?.message || e}`);
         }
       }
       setCurrentAction('');
+      setProgressValue(100);
     },
-    [fileManager, path, currentAction, onProgress, addRow]
+    [fileManager, path, currentAction, onProgress, addRow, showError]
   );
 
   useEffect(() => {
@@ -186,8 +218,12 @@ function App() {
       if (path === null) {
         return;
       }
-      const files = Array.from(e.dataTransfer.files);
-      await handleDroppedFiles(files);
+      try {
+        const files = await getFilesFromDataTransfer(e.dataTransfer);
+        await handleDroppedFiles(files);
+      } catch (err) {
+        showError(`Failed to read dropped files: ${err?.message || err}`);
+      }
     };
 
     window.addEventListener('dragover', onDragOver);
@@ -197,9 +233,9 @@ function App() {
       window.removeEventListener('drop', onDrop);
       clearTimeout(dragTimeout);
     };
-  }, [handleDroppedFiles, path]);
+  }, [handleDroppedFiles, path, showError]);
 
-  const onCellEditCommit = async (params) => {
+  const onCellEditCommit = useCallback(async (params) => {
     if (params.field !== 'name') {
       return;
     }
@@ -226,18 +262,18 @@ function App() {
       showError(`Failed to rename file: ${e}`);
       updateRowById(params.id, row);
     }
-  };
+  }, [fileManager, getRowById, showError, updateRowById]);
 
-  const onCellDoubleClick = async (params) => {
+  const onCellDoubleClick = useCallback(async (params) => {
     if (params.field === 'name') {
       return;
     }
     if (params.row.type === 'directory') {
       await showDirectory(params.row.path);
     }
-  };
+  }, [showDirectory]);
 
-  const onDeleteFileClick = async (params) => {
+  const onDeleteFileClick = useCallback(async (params) => {
     if (currentAction || !fileManager) {
       return;
     }
@@ -253,9 +289,9 @@ function App() {
     } finally {
       setCurrentAction('');
     }
-  };
+  }, [currentAction, fileManager, onProgress, deleteRowById, showError]);
 
-  const onUploadFileClick = async (event) => {
+  const onUploadFileClick = useCallback(async (event) => {
     if (currentAction || !fileManager || path === null) {
       return;
     }
@@ -274,14 +310,15 @@ function App() {
         addRow(row);
       }
     } catch (e) {
-      showError(`Failed to upload file: ${e}`);
+      showError(`Failed to upload file: ${e?.message || e}`);
     } finally {
       event.target.value = null;
       setCurrentAction('');
+      setProgressValue(100);
     }
-  };
+  }, [currentAction, fileManager, path, onProgress, addRow, showError]);
 
-  const onDownloadFileClick = async (params) => {
+  const onDownloadFileClick = useCallback(async (params) => {
     if (currentAction || !fileManager) {
       return;
     }
@@ -290,13 +327,13 @@ function App() {
       const writable = await pickLocationAsWritable(params.row.name);
       await fileManager.downloadFile(params.row.path, writable, onProgress);
     } catch (e) {
-      showError(`Failed to download file: ${e}`);
+      showError(`Failed to download file: ${e?.message || e}`);
     } finally {
       setCurrentAction('');
     }
-  };
+  }, [currentAction, fileManager, onProgress, showError]);
 
-  const onShareFileClick = async (params) => {
+  const onShareFileClick = useCallback(async (params) => {
     if (currentAction || !fileManager) {
       return;
     }
@@ -308,33 +345,32 @@ function App() {
     try {
       const fileName = params.row.name;
       const attachmentUrls = await fileManager.getAttachmentUrls(params.row.path);
-      const stringifyAttachmentUrls = JSON.stringify(attachmentUrls);
-      const encodedAttachmentUrls = pako.deflate(stringifyAttachmentUrls);
-      const base64EncodedAttachmentUrls = btoa(String.fromCharCode.apply(null, encodedAttachmentUrls))
-        .replace(/\+/g, '~')
-        .replace(/\//g, '_')
-        .replace(/=/g, '-');
+      const base64EncodedAttachmentUrls = encodeShareAttachmentUrls(attachmentUrls);
+      const basePath = (process.env.PUBLIC_URL || '').replace(/\/$/, '');
+      const shareUrl = `${window.location.origin}${basePath}/file?name=${encodeURIComponent(fileName)}&size=${encodeURIComponent(params.row.size || 0)}#${base64EncodedAttachmentUrls}`;
 
-      const shareUrl = encodeURI(urlJoin(window.location.href, `/file/?name=${encodeURIComponent(fileName)}&size=${params.row.size}#${base64EncodedAttachmentUrls}`));
       if (navigator.share) {
         try {
           await navigator.share({ title: fileName, url: shareUrl });
-        } catch (e) {
+        } catch {
           await navigator.clipboard.writeText(shareUrl);
-          alert('File was too large to share. A link to it has been copied to your clipboard.');
+          showError('Share dialog was cancelled or unavailable. Link copied to clipboard.');
         }
-      } else {
+      } else if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(shareUrl);
-        alert('File shared successfully. A link to it has been copied to your clipboard.');
+        showError('Share link copied to clipboard.');
+      } else {
+        window.prompt('Copy this share link:', shareUrl);
       }
     } catch (e) {
-      showError(`Failed to share file: ${e}`);
+      showError(`Failed to share file: ${e?.message || e}`);
     } finally {
       setCurrentAction('');
+      setProgressValue(-1);
     }
-  };
+  }, [currentAction, fileManager, showError]);
 
-  const onNewFolderClick = async () => {
+  const onNewFolderClick = useCallback(async () => {
     if (currentAction || !fileManager || path === null) {
       return;
     }
@@ -347,13 +383,13 @@ function App() {
         addRow(folder);
       }
     } catch (e) {
-      showError(`Failed to create folder: ${e}`);
+      showError(`Failed to create folder: ${e?.message || e}`);
     } finally {
       setCurrentAction('');
     }
-  };
+  }, [currentAction, fileManager, path, addRow, showError]);
 
-  const showSearchResults = (value = null) => {
+  const showSearchResults = useCallback((value = null) => {
     if (!fileManager) {
       return;
     }
@@ -374,12 +410,41 @@ function App() {
 
     setRows(fileOptions);
     setPath(null);
-  };
+  }, [fileManager, searchValue, searchOptions, showDirectory]);
 
-  const safeFileManager = fileManager || {
+  const safeFileManager = useMemo(() => (fileManager || {
     getFile: () => null,
     getChildren: () => ({}),
-  };
+  }), [fileManager]);
+
+  const columns = useMemo(() => {
+    const cols = buildColumns(safeFileManager, currentAction, onShareFileClick, onDownloadFileClick, onDeleteFileClick);
+    return cols.map((col) => (col.field === 'path' ? { ...col, hide: path !== null } : col));
+  }, [safeFileManager, currentAction, onShareFileClick, onDownloadFileClick, onDeleteFileClick, path]);
+
+  const rootContent = (() => {
+    if (loading) {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+          <Spinner animation="border" /> <span style={{ marginLeft: 12 }}>Loading your storage...</span>
+        </Box>
+      );
+    }
+    if (initError) {
+      return (
+        <Box sx={{ p: 3, maxWidth: 700, mx: 'auto' }}>
+          <Alert variant="danger">
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Could not load your Disbox storage</div>
+            <div style={{ marginBottom: 12 }}>{initError}</div>
+            <BsButton variant="outline-danger" onClick={() => { localStorage.removeItem('webhookUrl'); window.location.href = (process.env.PUBLIC_URL || '') + '/setup'; }}>
+              Change webhook URL
+            </BsButton>
+          </Alert>
+        </Box>
+      );
+    }
+    return null;
+  })();
 
   return (
     <ThemeProvider theme={theme ? darkTheme : lightTheme}>
@@ -485,33 +550,35 @@ function App() {
 
         <PathParts path={path} fileManager={fileManager} showDirectory={showDirectory} />
 
-        <Box sx={{ flex: 1, height: '72vh', width: '100%', p: 2 }}>
-          <DataGrid
-            sx={{
-              width: 1,
-              '& .MuiDataGrid-cell--editing': {
-                bgcolor: 'rgb(255,215,115, 0.19)',
-                color: '#1a3e72',
-                '& .MuiInputBase-root': {
-                  height: '100%',
+        {rootContent ? rootContent : (
+          <Box sx={{ flex: 1, height: '72vh', width: '100%', p: 2 }}>
+            <DataGrid
+              sx={{
+                width: 1,
+                '& .MuiDataGrid-cell--editing': {
+                  bgcolor: 'rgb(255,215,115, 0.19)',
+                  color: '#1a3e72',
+                  '& .MuiInputBase-root': {
+                    height: '100%',
+                  },
                 },
-              },
-              '& .Mui-error': {
-                bgcolor: (theme) => `rgb(126,10,15, ${theme.palette.mode === 'dark' ? 0 : 0.1})`,
-                color: (theme) => (theme.palette.mode === 'dark' ? '#ff4343' : '#750f0f'),
-              },
-            }}
-            style={{ border: '0px' }}
-            rows={rows}
-            columns={buildColumns(safeFileManager, currentAction, onShareFileClick, onDownloadFileClick, onDeleteFileClick)}
-            hideFooter={true}
-            checkboxSelection
-            disableSelectionOnClick
-            showColumnRightBorder={false}
-            onCellEditCommit={onCellEditCommit}
-            onCellDoubleClick={onCellDoubleClick}
-          />
-        </Box>
+                '& .Mui-error': {
+                  bgcolor: (theme) => `rgb(126,10,15, ${theme.palette.mode === 'dark' ? 0 : 0.1})`,
+                  color: (theme) => (theme.palette.mode === 'dark' ? '#ff4343' : '#750f0f'),
+                },
+              }}
+              style={{ border: '0px' }}
+              rows={rows}
+              columns={columns}
+              hideFooter={true}
+              checkboxSelection
+              disableSelectionOnClick
+              showColumnRightBorder={false}
+              onCellEditCommit={onCellEditCommit}
+              onCellDoubleClick={onCellDoubleClick}
+            />
+          </Box>
+        )}
 
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 2 }}>
           <ThemeSwitch theme={theme} setTheme={setTheme} />

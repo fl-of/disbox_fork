@@ -1,28 +1,47 @@
-import { Button, Form } from "react-bootstrap";
+import { useState } from "react";
+import { Alert, Button, Form, Spinner } from "react-bootstrap";
 import { useNavigate } from 'react-router-dom';
 import './App.css';
+import DisboxFileManager from './disbox-file-manager';
 import NavigationBar from './NavigationBar';
 
 function Setup() {
     const navigate = useNavigate();
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    const onContinue = (event) => {
+    const onContinue = async (event) => {
         event.preventDefault();
-        const webhookUrl = document.getElementById("webhookUrl").value;
-        localStorage.setItem("webhookUrl", webhookUrl);
-        navigate("/");
+        const webhookUrl = String(document.getElementById("webhookUrl").value || '').trim();
+        if (!webhookUrl) {
+            setError('Please paste your Discord webhook URL.');
+            return;
+        }
+
+        setError('');
+        setLoading(true);
+        try {
+            await DisboxFileManager.create(webhookUrl);
+            localStorage.setItem("webhookUrl", webhookUrl);
+            navigate("/");
+        } catch (e) {
+            setError(e?.message || String(e));
+        } finally {
+            setLoading(false);
+        }
     };
+
     return (<div>
         <NavigationBar />
         <div className="App App-header" style={{ color: "black" }}>
-            <div style={{ backgroundColor: "#FCFCFC", width: "66%", height: "90vh" }}>
+            <div style={{ backgroundColor: "#FCFCFC", width: "66%", minHeight: "90vh", paddingBottom: "2rem" }}>
                 <h1 style={{ fontSize: "6rem" }} className='mt-3' >
                     <b>Setup</b>
                 </h1>
                 <h1 style={{ fontSize: "2rem" }}>
                     <b>Just a few steps and we're ready to go.</b>
                 </h1>
-                <div style={{ fontSize: "1.5rem", textAlign: "left", width: "80%", margin: "2rem" }} className="mt-4">
+                <div style={{ fontSize: "1.5rem", textAlign: "left", width: "80%", margin: "2rem auto" }} className="mt-4">
                     <b style={{ color: "#555555" }}>1.</b> Open a <a href="https://discord.com/app" target="_blank" rel="noopener noreferrer">Discord</a> account, if you don't already have one.
                     <div style={{ height: "1rem" }} />
                     <b style={{ color: "#555555" }}>2.</b> Open a new server.
@@ -32,16 +51,19 @@ function Setup() {
                     <div style={{ height: "1rem" }} />
                     <b style={{ color: "#555555" }}>4.</b> Copy the URL of the webhook you just created by clicking on the <b>Copy Webhook URL</b> button.
                     <div style={{ height: "1rem" }} />
-                    This URL will be used as your password for the Disbox client and it provides full access to all your files, so don't share it with anyone or store it anywhere.
-                    You can always access this URL from the Integrations menu again, if you forget it.
+                    This URL is used as the key to your Disbox storage and provides access to your files, so don't share it with anyone.
+                    You can always copy it again later from the Integrations menu.
                     <div style={{ height: "1rem" }} />
                     <b style={{ color: "#555555" }}>5.</b> Paste your URL here:
                 </div>
                 <Form onSubmit={onContinue}>
                     <Form.Group>
-                        <Form.Control id="webhookUrl" type="password" placeholder="Webhook URL" style={{ width: "80%", margin: "auto", fontSize: "2rem" }} />
+                        <Form.Control id="webhookUrl" type="password" placeholder="Webhook URL" style={{ width: "80%", margin: "auto", fontSize: "1.5rem" }} autoComplete="off" />
                     </Form.Group>
-                    <Button type="submit" variant="primary" style={{ width: "80%", margin: "auto", marginTop: "1rem", fontSize: "2rem" }}><b>Continue</b></Button>
+                    {error && <Alert variant="danger" style={{ width: "80%", margin: "1rem auto 0" }}>{error}</Alert>}
+                    <Button type="submit" variant="primary" disabled={loading} style={{ width: "80%", margin: "auto", marginTop: "1rem", fontSize: "1.5rem" }}>
+                        {loading ? <><Spinner animation="border" size="sm" /> Connecting...</> : <b>Continue</b>}
+                    </Button>
                 </Form>
             </div>
         </div>

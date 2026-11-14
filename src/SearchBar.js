@@ -10,74 +10,97 @@ function SearchBar({ fileManager, files = true, directories = true, rows,
 
 
     useEffect(() => {
-        if (fileManager === null) {
+        if (!fileManager) {
+            setOptions([]);
+            setBaseOptions(new Set());
+            setByExtension({});
             return;
         }
 
-        const options = [];
-        const byExtension = {};
+        const allOptions = [];
+        const byExt = {};
 
         const queue = [""];
         while (queue.length > 0) {
-            const file = queue.pop();
-            const files = fileManager.getChildren(file.path || file);
-            Object.values(files).forEach(f => {
+            const current = queue.pop();
+            const children = fileManager.getChildren(typeof current === 'string' ? current : (current.path || ""));
+            Object.values(children).forEach(f => {
                 if (f.type === "directory") {
                     queue.push(f);
                     if (directories) {
-                        options.push(f.path);
+                        allOptions.push(f.path);
                     }
-                } else if (files && f.type === "file") {  
-                    options.push(f.path);
-                    const extension = f.path.split(".").pop().toLowerCase();
+                } else if (f.type === "file") {
+                    if (files) {
+                        allOptions.push(f.path);
+                    }
                     if (advanced) {
-                        if (!byExtension[extension]) {
-                            byExtension[extension] = [];
+                        const parts = f.name.split(".");
+                        const extension = parts.length > 1 ? parts.pop().toLowerCase() : "";
+                        if (extension) {
+                            if (!byExt[extension]) {
+                                byExt[extension] = [];
+                            }
+                            byExt[extension].push(f.path);
                         }
-                        byExtension[extension].push(f.path);
                     }
                 }
             });
         }
-        setOptions(options);
-        setBaseOptions(new Set(options));
-        setByExtension(byExtension);
+        setOptions(allOptions);
+        setBaseOptions(new Set(allOptions));
+        setByExtension(byExt);
 
-    }, [rows]);
+    }, [fileManager, rows, files, directories, advanced]);
 
 
     const setAutoCompleteOptions = (event, value) => {
+        const input = value || "";
         let newOptions = [];
-        const parts = value.split(" ");
+        const parts = input.split(" ").filter(Boolean);
         const advancedParts = [];
+        const textParts = [];
         parts.forEach(part => {
             if (part.startsWith("ext:")) {
                 advancedParts.push(part);
+            } else {
+                textParts.push(part);
             }
         });
-        let advancedOptions = [];
+
+        let advancedOptions = null;
         advancedParts.forEach(part => {
-            const index = parts.indexOf(part);
-            parts.splice(index, 1);
             if (advanced) {
-                const type = part.split(":")[1];
-                if (byExtension[type]) {
-                    advancedOptions.push(...byExtension[type]);
+                const type = part.split(":")[1]?.toLowerCase();
+                if (type && byExtension[type]) {
+                    if (advancedOptions === null) {
+                        advancedOptions = new Set(byExtension[type]);
+                    } else {
+                        advancedOptions = new Set([...advancedOptions].filter((p) => byExtension[type].includes(p)));
+                    }
                 }
             }
         });
-        for (let option of baseOptions) {
-            if (parts.some(part => option.toLowerCase().includes(part.toLowerCase()))) {
-                newOptions.push(option);
+
+        const candidateOptions = advancedOptions === null ? [...baseOptions] : [...advancedOptions];
+        if (textParts.length === 0) {
+            newOptions = candidateOptions;
+        } else {
+            for (let option of candidateOptions) {
+                const lower = option.toLowerCase();
+                if (textParts.every(part => lower.includes(part.toLowerCase()))) {
+                    newOptions.push(option);
+                }
             }
         }
-        if (parts.join(" ") in baseOptions) {
-            newOptions.unshift(parts.join(" "));
+        if (input && baseOptions.has(input)) {
+            newOptions.unshift(input);
         }
-        newOptions.push(...advancedOptions);
         newOptions = [...new Set(newOptions)];
         setOptions(newOptions);
-        onOptionsChanged(newOptions);
+        if (onOptionsChanged) {
+            onOptionsChanged(newOptions);
+        }
     }
         
 

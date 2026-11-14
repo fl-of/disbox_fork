@@ -36,41 +36,36 @@ function File() {
         }
     }
 
-async function download() {
-    const fileName = searchParams.get("name");
-    let attachmentUrlsArray;
-
-    if (searchParams.get("attachmentUrls")) {
-        let base64AttachmentUrls = searchParams.get("attachmentUrls");
-        base64AttachmentUrls = base64AttachmentUrls.replace(/~/g, '+').replace(/_/g, '/').replace(/-/g, '=');
-        attachmentUrlsArray = JSON.parse(atob(base64AttachmentUrls));
-    } else {
-        const base64AttachmentUrls = atob(locationData.hash.replace(/~/g, '+').replace(/_/g, '/').replace(/-/g, '=').replace(/#/g, ''));
-        const u8Array = new Uint8Array(base64AttachmentUrls.length);
-        for (let i = 0; i < base64AttachmentUrls.length; i++) {
-            u8Array[i] = base64AttachmentUrls.charCodeAt(i);
-        }
+    async function download() {
+        const fileName = searchParams.get("name");
+        let attachmentUrlsArray;
 
         try {
-            const attachmentUrls = pako.inflate(new Uint8Array(u8Array), { to: 'string' });
-            attachmentUrlsArray = JSON.parse(attachmentUrls);
+            if (searchParams.get("attachmentUrls")) {
+                let base64AttachmentUrls = searchParams.get("attachmentUrls");
+                base64AttachmentUrls = base64AttachmentUrls.replace(/~/g, '+').replace(/_/g, '/').replace(/-/g, '=');
+                attachmentUrlsArray = JSON.parse(atob(base64AttachmentUrls));
+            } else {
+                const base64AttachmentUrls = atob(locationData.hash.replace(/~/g, '+').replace(/_/g, '/').replace(/-/g, '=').replace(/#/g, ''));
+                const u8Array = new Uint8Array(base64AttachmentUrls.length);
+                for (let i = 0; i < base64AttachmentUrls.length; i++) {
+                    u8Array[i] = base64AttachmentUrls.charCodeAt(i);
+                }
+
+                const attachmentUrls = pako.inflate(new Uint8Array(u8Array), { to: 'string' });
+                attachmentUrlsArray = JSON.parse(attachmentUrls);
+            }
+
+            const writable = await pickLocationAsWritable(fileName);
+            setCurrentlyDownloading(true);
+            setProgressValue(0);
+            await downloadFromAttachmentUrls(attachmentUrlsArray, writable, onProgress, searchParams.get("size"));
         } catch (error) {
             console.log(error);
-            throw error;
+            setCurrentlyDownloading(false);
+            alert(`Failed to download file: ${error?.message || error}`);
         }
     }
-
-    try {
-        const writable = await pickLocationAsWritable(fileName);
-        setCurrentlyDownloading(true);
-        setProgressValue(0);
-        await downloadFromAttachmentUrls(attachmentUrlsArray, writable, onProgress, searchParams.get("size"));
-    } catch (error) {
-        console.log(error);
-        throw error;
-        // Handle the download error
-    }
-}
 
     
     return (searchParams.get("name") !== null && (searchParams.get("attachmentUrls")  !== null || locationData.hash !== '') && searchParams.get("size") !== null) ? 

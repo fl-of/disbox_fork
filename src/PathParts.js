@@ -1,45 +1,47 @@
-import React, { useState, useEffect } from 'react';
-import { Button } from '@mui/material';
-        
+import React, { useEffect, useState } from 'react';
+import { Box, Button } from '@mui/material';
 
-function PathPart(props) {
-    return <div>
-        <Button onClick={() => props.showDirectory(props.path)}>{`${props.name} >`}</Button>
-    </div>
-}
-
-export default function PathParts(props) {
-    const [partComponents, setPartComponents] = useState([]);
+export default function PathParts({ fileManager, path, showDirectory }) {
+    const [parts, setParts] = useState([{ name: 'Storage', path: '' }]);
 
     useEffect(() => {
-        async function f() {
-            if (!props.fileManager) {
-                return;
-            }
-            const parts = [];
-            if (props.path !== null) {
-                if (props.path !== "") {
-                    parts.push(<PathPart fileManager={props.fileManager} path={props.path}
-                        name={await props.fileManager.getFile(props.path).name} showDirectory={props.showDirectory} />);
-                }
-                let parent = await props.fileManager.getParent(props.path);
-                while (parent && "path" in parent) {
-                    parts.push(<PathPart fileManager={props.fileManager} path={parent.path} name={parent.name} showDirectory={props.showDirectory} />);
-                    parent = await props.fileManager.getParent(parent.path);
-                }
-            }
-            parts.push(<PathPart fileManager={props.fileManager} path={""} name={"Storage"} showDirectory={props.showDirectory} />);
-            setPartComponents(parts.reverse());
-
+        if (path === null || path === undefined) {
+            setParts([]);
+            return;
         }
-        f();
-    }, [props.path]);
 
-    return <div style={{ display: "flex" }}>
-        {partComponents.map((component, index) => (
-            <React.Fragment key={index}>
-                {component}
-            </React.Fragment>
-        ))}
-    </div>
+        const nextParts = [];
+        const normalized = String(path).replace(/^\/+|\/+$/g, '');
+        if (normalized) {
+            const segments = normalized.split('/');
+            let current = '';
+            for (const segment of segments) {
+                current += `/${segment}`;
+                nextParts.push({ name: segment, path: current });
+            }
+        }
+        nextParts.unshift({ name: 'Storage', path: '' });
+        setParts(nextParts);
+    }, [fileManager, path]);
+
+    if (path === null || path === undefined) {
+        return null;
+    }
+
+    return (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', px: 2, py: 0.5 }}>
+            {parts.map((part, index) => (
+                <React.Fragment key={part.path || 'root'}>
+                    <Button
+                        size="small"
+                        onClick={() => showDirectory(part.path)}
+                        sx={{ textTransform: 'none', minWidth: 0 }}
+                    >
+                        {part.name}
+                    </Button>
+                    {index < parts.length - 1 && <span style={{ opacity: 0.6 }}>/</span>}
+                </React.Fragment>
+            ))}
+        </Box>
+    );
 }
