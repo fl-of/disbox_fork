@@ -1,7 +1,6 @@
 import FormControlLabel from '@mui/material/FormControlLabel';
 import { styled } from '@mui/material/styles';
 import Switch from '@mui/material/Switch';
-import * as React from 'react';
 
 const ThemeSwitchStyle = styled(Switch)(({ theme }) => ({
   width: 62,
@@ -50,13 +49,20 @@ const ThemeSwitchStyle = styled(Switch)(({ theme }) => ({
   },
 }));
 
-function ThemeSwitch(props) {
-    return <div>
-        <FormControlLabel
-        control={<ThemeSwitchStyle sx={{ m: 1 }} checked={props.theme} onChange={(event) => props.setTheme(event.target.checked)} />}
+interface ThemeSwitchProps {
+  theme: boolean;
+  setTheme: (checked: boolean) => void;
+}
+
+function ThemeSwitch({ theme, setTheme }: ThemeSwitchProps) {
+  return (
+    <div>
+      <FormControlLabel
+        control={<ThemeSwitchStyle sx={{ m: 1 }} checked={theme} onChange={(event) => setTheme(event.target.checked)} />}
         label="Theme"
       />
     </div>
+  );
 }
 
 export default ThemeSwitch;

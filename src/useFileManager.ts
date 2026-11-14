@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import DisboxFileManager from './disbox-file-manager';
 
-let cachedManager = null;
-let cachedPromise = null;
-let cachedWebhookUrl = null;
+let cachedManager: DisboxFileManager | null = null;
+let cachedPromise: Promise<DisboxFileManager | null> | null = null;
+let cachedWebhookUrl: string | null = null;
 
-export function getWebhookUrl() {
+export function getWebhookUrl(): string | null {
   return localStorage.getItem('webhookUrl');
 }
 
-export function clearFileManager() {
+export function clearFileManager(): void {
   cachedManager = null;
   cachedPromise = null;
   cachedWebhookUrl = null;
 }
 
-export function loadFileManager(force = false) {
+export function loadFileManager(force = false): Promise<DisboxFileManager | null> {
   const webhookUrl = getWebhookUrl();
   if (!webhookUrl) {
     return Promise.resolve(null);
@@ -44,7 +44,7 @@ export function loadFileManager(force = false) {
 }
 
 export default function useFileManager() {
-  const [state, setState] = useState(() => (
+  const [state, setState] = useState<{ fileManager: DisboxFileManager | null; loading: boolean; error: any }>(() => (
     cachedManager
       ? { fileManager: cachedManager, loading: false, error: null }
       : { fileManager: null, loading: true, error: null }
@@ -71,7 +71,7 @@ export default function useFileManager() {
   useEffect(() => {
     mounted.current = true;
     if (!cachedManager) {
-      load(false);
+      void load(false);
     }
     return () => {
       mounted.current = false;

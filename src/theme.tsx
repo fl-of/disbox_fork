@@ -1,5 +1,7 @@
 import { createTheme, CssBaseline, ThemeProvider as MuiThemeProvider } from '@mui/material';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+
+type ThemeMode = 'light' | 'dark';
 
 const darkTheme = createTheme({
   palette: {
@@ -17,14 +19,21 @@ const lightTheme = createTheme({
   shape: { borderRadius: 10 },
 });
 
-const ThemeContext = createContext({
+interface ThemeContextValue {
+  mode: ThemeMode;
+  isDark: boolean;
+  setMode: (mode: ThemeMode) => void;
+  toggle: () => void;
+}
+
+const ThemeContext = createContext<ThemeContextValue>({
   mode: 'dark',
   isDark: true,
   setMode: () => {},
   toggle: () => {},
 });
 
-function getInitialMode() {
+function getInitialMode(): ThemeMode {
   const stored = localStorage.getItem('theme');
   if (stored === 'light' || stored === 'dark') {
     return stored;
@@ -34,14 +43,14 @@ function getInitialMode() {
     : 'dark';
 }
 
-export function AppThemeProvider({ children }) {
-  const [mode, setModeState] = useState(getInitialMode);
+export function AppThemeProvider({ children }: { children: ReactNode }) {
+  const [mode, setModeState] = useState<ThemeMode>(getInitialMode);
 
   useEffect(() => {
     localStorage.setItem('theme', mode);
   }, [mode]);
 
-  const setMode = useCallback((newMode) => {
+  const setMode = useCallback((newMode: ThemeMode) => {
     setModeState(newMode === 'light' ? 'light' : 'dark');
   }, []);
 
