@@ -2,7 +2,7 @@
 
 This folder contains a **separate Firefox WebExtension** that helps the Disbox web app download Discord attachment files by fetching them from the extension context (bypassing page CORS restrictions). It is isolated from the main web app code.
 
-> This is an experimental/local extension implementation for Firefox. It is **not** the same as the published Chrome extension and uses a different extension ID.
+> This is an experimental/local extension implementation for Firefox. It is **not** the same as the published Chrome extension and uses a different extension ID. If you submit/publish a separate public AMO listing, use a unique Gecko extension ID for that listing.
 
 ## What it does
 
@@ -36,7 +36,13 @@ This folder provides the Firefox extension implementation without changing the o
 
 ### Temporary local testing tip
 
-For local experiments, you can temporarily change the extension ID used by the web app (e.g. in `src/disbox-file-manager.ts` and any detection logic) to the ID in `manifest.json` (`disbox-downloader@example.local`) and rebuild. Do **not** commit that change if you want to keep Chrome behavior unchanged.
+For local experiments, configure the web app with the extension ID from `manifest.json` via `.env` (recommended) instead of hardcoding code changes:
+
+```env
+VITE_DISBOX_EXTENSION_ID=disbox-downloader-public@example.local
+```
+
+Then restart/rebuild the web app. If you need to support multiple extension IDs during migration/testing, use `VITE_DISBOX_EXTENSION_IDS` with a comma-separated list. Avoid committing temporary hardcoded ID changes if you want to keep other browser/extension behavior unchanged.
 
 ## Permissions
 

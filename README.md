@@ -1,8 +1,6 @@
 # Disbox Web Client
 
-### Try Disbox here: https://disboxapp.github.io/web
-
-This is the web client for the [Disbox](https://github.com/DisboxApp/web) project.
+This is the web client for the [Disbox](https://github.com/DisboxApp/web) project (fork/workspace with ongoing improvements).
 
 Disbox is a cloud storage service that stores your files on Discord. It bypasses the file size limit by splitting files into chunks and wraps everything in a virtual file system.
 
@@ -60,7 +58,7 @@ Suggestions and contributions are welcome!
   - Content-script bridge for reliable page↔extension messaging
   - Direct download support via browser Downloads API (preferred, avoids page CORS/data URL handoff to page)
   - Legacy fetch-to-data-URL fallback path retained for compatibility
-  - Updated manifest/permissions and versioning for AMO validation (current extension package: `0.1.2`)
+  - Updated manifest/permissions and versioning for AMO validation (prepared public/listed package `0.1.3` with ID `disbox-downloader-public@example.local`; a previous `0.1.2` build was AMO-approved)
 - **Testing/docs**
   - Added Vitest-based unit tests for utility/share logic and `docs/QA_CHECKLIST.md` for manual cross-browser QA
 
@@ -155,8 +153,8 @@ Create a `.env` file in the project root to configure build-time variables:
 # VITE_DOWNLOAD_PROXY_URL=https://your-proxy.example/fetch?target={url}
 
 # Optional: extension ID(s) for download assistance
-# VITE_DISBOX_EXTENSION_ID=disbox-downloader@example.local
-# VITE_DISBOX_EXTENSION_IDS=disbox-downloader@example.local,jklpfhklkhbfgeencifbmkoiaokeieah
+# VITE_DISBOX_EXTENSION_ID=disbox-downloader-public@example.local
+# VITE_DISBOX_EXTENSION_IDS=disbox-downloader-public@example.local,disbox-downloader@example.local,jklpfhklkhbfgeencifbmkoiaokeieah
 ```
 
 - `VITE_DISBOX_SERVER_URL` – overrides the Disbox metadata server URL (defaults to the project’s configured server)
@@ -169,12 +167,13 @@ Create a `.env` file in the project root to configure build-time variables:
 
 A Firefox extension implementation is available in `firefox-extension/` to assist with downloads by fetching Discord attachment URLs from the extension context (bypassing page CORS restrictions).
 
+- **Download/install:** [Firefox Add-ons (AMO)](https://addons.mozilla.org/) — search for **“Disbox Downloader for Firefox”** (or use the signed AMO build if you already have the listing link). For local/testing, you can also load the unpacked extension from `firefox-extension/`.
 - **Source/location:** `firefox-extension/` (manifest, background script, content-script bridge, icons)
-- **Extension ID:** `disbox-downloader@example.local` (as configured in this repo’s Firefox extension manifest)
+- **Extension ID:** `disbox-downloader-public@example.local` (as configured in this repo’s Firefox extension manifest/package for public listing)
 - **Capabilities:** direct download via browser Downloads API (preferred), capability detection/ping, and legacy fetch fallback path
 - **Allowed origins (content-script bridge):** `http://localhost/*`, `http://127.0.0.1/*`, `https://localhost/*`, `https://127.0.0.1/*`, `https://disboxapp.github.io/*`
 - **Temporary/local load:** `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on...** → `firefox-extension/manifest.json`
-- **Current packaged manifest version in repo:** `0.1.2` (submitted for AMO review; approval status may change over time)
+- **Current packaged manifest version in repo:** `0.1.3` (prepared with a unique ID for a separate public/listed AMO submission)
 
 ### Using the Firefox extension with this web app
 
@@ -183,7 +182,7 @@ The web app must be configured to message the extension ID, and the build must i
 1. Install/load the Firefox extension (temporary or signed `.xpi`)
 2. Set in `.env`:
    ```env
-   VITE_DISBOX_EXTENSION_ID=disbox-downloader@example.local
+   VITE_DISBOX_EXTENSION_ID=disbox-downloader-public@example.local
    ```
 3. Restart/rebuild the web app (`npm run dev`, or `npm run build` / `npm run preview:prod`)
 4. Open the app on an allowed origin (e.g. `http://localhost:5173/`)
