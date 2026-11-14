@@ -1,12 +1,14 @@
 import 'bootstrap/dist/css/bootstrap.css';
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-import App from './App';
-import FilePage from './File';
-import Home from './Home';
+import { HelmetProvider } from 'react-helmet-async';
 import './index.css';
-import Setup from './Setup';
+
+const App = lazy(() => import('./App'));
+const FilePage = lazy(() => import('./File'));
+const Home = lazy(() => import('./Home'));
+const Setup = lazy(() => import('./Setup'));
 
 const basename = (import.meta.env.BASE_URL || '/').replace(/\/$/, '') || '/';
 
@@ -25,13 +27,17 @@ const root = createRoot(container);
 
 root.render(
   <React.StrictMode>
-    <BrowserRouter basename={basename}>
-      <Routes>
-        <Route path="" element={<HomeOrApp />} />
-        <Route path="home" element={<Home />} />
-        <Route path="setup" element={<Setup />} />
-        <Route path="file" element={<FilePage />} />
-      </Routes>
-    </BrowserRouter>
-  </React.StrictMode>
+    <HelmetProvider>
+      <BrowserRouter basename={basename}>
+        <Suspense fallback={<div style={{ padding: 24 }}>Loading...</div>}>
+          <Routes>
+            <Route path="" element={<HomeOrApp />} />
+            <Route path="home" element={<Home />} />
+            <Route path="setup" element={<Setup />} />
+            <Route path="file" element={<FilePage />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </HelmetProvider>
+  </React.StrictMode>,
 );

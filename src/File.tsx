@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Button, CircularProgress, Container, Paper, Stack, Typography } from '@mui/material';
-import { Helmet } from 'react-helmet';
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Container,
+  Paper,
+  Stack,
+  Typography,
+} from '@mui/material';
+import { Helmet } from 'react-helmet-async';
 import { useLocation, useSearchParams } from 'react-router-dom';
 import pako from 'pako';
 import './App.css';
@@ -11,11 +20,18 @@ import NavigationBar from './NavigationBar';
 function decodeAttachmentUrls(searchParams: URLSearchParams, hash: string): string[] {
   if (searchParams.get('attachmentUrls')) {
     let base64AttachmentUrls = searchParams.get('attachmentUrls') || '';
-    base64AttachmentUrls = base64AttachmentUrls.replace(/~/g, '+').replace(/_/g, '/').replace(/-/g, '=');
+    base64AttachmentUrls = base64AttachmentUrls
+      .replace(/~/g, '+')
+      .replace(/_/g, '/')
+      .replace(/-/g, '=');
     return JSON.parse(atob(base64AttachmentUrls));
   }
 
-  const raw = (hash || '').replace(/^#/, '').replace(/~/g, '+').replace(/_/g, '/').replace(/-/g, '=');
+  const raw = (hash || '')
+    .replace(/^#/, '')
+    .replace(/~/g, '+')
+    .replace(/_/g, '/')
+    .replace(/-/g, '=');
   const base64AttachmentUrls = atob(raw);
   const u8Array = new Uint8Array(base64AttachmentUrls.length);
   for (let i = 0; i < base64AttachmentUrls.length; i++) {
@@ -48,9 +64,12 @@ function FilePage() {
     }
   }, [hasPayload, locationData.hash, searchParams]);
 
-  useEffect(() => () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-  }, [previewUrl]);
+  useEffect(
+    () => () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    },
+    [previewUrl],
+  );
 
   const onProgress = (value: number, total: number) => {
     if (!total || total <= 0) {
@@ -79,7 +98,14 @@ function FilePage() {
   const handlePreview = async () => {
     if (!Array.isArray(attachmentUrls)) return;
     const mime = getMimeType(fileName);
-    if (!(mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/pdf' || mime.startsWith('text/') || mime === 'application/json')) {
+    if (!(
+      mime.startsWith('image/') ||
+      mime.startsWith('video/') ||
+      mime.startsWith('audio/') ||
+      mime === 'application/pdf' ||
+      mime.startsWith('text/') ||
+      mime === 'application/json'
+    )) {
       setError('Preview is not available for this file type.');
       return;
     }
@@ -91,7 +117,12 @@ function FilePage() {
       setError('');
       setPreviewLoading(true);
       const chunks: Blob[] = [];
-      const writable = { write: async (blob: Blob) => { chunks.push(blob); }, close: async () => {} };
+      const writable = {
+        write: async (blob: Blob) => {
+          chunks.push(blob);
+        },
+        close: async () => {},
+      };
       await downloadFromAttachmentUrls(attachmentUrls, writable, null, size);
       const blob = new Blob(chunks, { type: mime || 'application/octet-stream' });
       if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -129,7 +160,9 @@ function FilePage() {
       <Box sx={{ minHeight: '100vh' }}>
         <NavigationBar />
         <Container maxWidth="sm" sx={{ py: 8 }}>
-          <Alert severity="error">This share link could not be read: {(attachmentUrls as any).__error}</Alert>
+          <Alert severity="error">
+            This share link could not be read: {(attachmentUrls as any).__error}
+          </Alert>
         </Container>
       </Box>
     );
@@ -148,43 +181,101 @@ function FilePage() {
         <Paper sx={{ p: { xs: 2, md: 4 } }} elevation={3}>
           <Stack spacing={2}>
             <Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, wordBreak: 'break-word' }}>{fileName}</Typography>
-              <Typography color="text.secondary">{formatSize(size)}{mime ? ` • ${mime}` : ''}</Typography>
+              <Typography variant="h4" sx={{ fontWeight: 700, wordBreak: 'break-word' }}>
+                {fileName}
+              </Typography>
+              <Typography color="text.secondary">
+                {formatSize(size)}
+                {mime ? ` • ${mime}` : ''}
+              </Typography>
             </Box>
 
             <Alert severity="info">
-              This file is shared via Discord attachment links. Links may expire over time; if download fails, ask the owner to generate a new share link.
+              This file is shared via Discord attachment links. Links may expire over time; if
+              download fails, ask the owner to generate a new share link.
             </Alert>
 
             {error && <Alert severity="error">{error}</Alert>}
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-              <Button variant="contained" onClick={handleDownload} disabled={downloading || !Array.isArray(attachmentUrls)}>
+              <Button
+                variant="contained"
+                onClick={handleDownload}
+                disabled={downloading || !Array.isArray(attachmentUrls)}
+              >
                 {downloading ? 'Downloading...' : 'Download'}
               </Button>
-              <Button variant="outlined" onClick={handlePreview} disabled={previewLoading || !Array.isArray(attachmentUrls)}>
+              <Button
+                variant="outlined"
+                onClick={handlePreview}
+                disabled={previewLoading || !Array.isArray(attachmentUrls)}
+              >
                 {previewLoading ? 'Loading preview...' : 'Preview'}
               </Button>
-              <Button variant="text" onClick={handleCopyLink}>{copied ? 'Link copied' : 'Copy share link'}</Button>
+              <Button variant="text" onClick={handleCopyLink}>
+                {copied ? 'Link copied' : 'Copy share link'}
+              </Button>
             </Stack>
 
             {(downloading || progress >= 0) && (
               <Box>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                  {downloading ? `Downloading: ${progress}%` : progress === 100 ? 'Download complete.' : ''}
+                  {downloading
+                    ? `Downloading: ${progress}%`
+                    : progress === 100
+                      ? 'Download complete.'
+                      : ''}
                 </Typography>
-                {downloading && <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><CircularProgress size={18} /><Typography variant="body2">{progress}%</Typography></Box>}
+                {downloading && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CircularProgress size={18} />
+                    <Typography variant="body2">{progress}%</Typography>
+                  </Box>
+                )}
               </Box>
             )}
 
             {previewUrl && (
               <Box sx={{ mt: 1 }}>
-                <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>Preview</Typography>
-                {mime.startsWith('image/') && <img src={previewUrl} alt={fileName} style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />}
-                {mime.startsWith('video/') && <video src={previewUrl} controls style={{ width: '100%', maxHeight: '70vh' }} />}
-                {mime.startsWith('audio/') && <audio src={previewUrl} controls style={{ width: '100%' }} />}
-                {mime === 'application/pdf' && <iframe title="PDF preview" src={previewUrl} style={{ width: '100%', height: '70vh', border: 0 }} />}
-                {(mime.startsWith('text/') || mime === 'application/json') && <iframe title="Text preview" src={previewUrl} style={{ width: '100%', height: '60vh', border: '1px solid rgba(128,128,128,0.3)' }} />}
+                <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600 }}>
+                  Preview
+                </Typography>
+                {mime.startsWith('image/') && (
+                  <img
+                    src={previewUrl}
+                    alt={fileName}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '70vh',
+                      objectFit: 'contain',
+                      borderRadius: 8,
+                    }}
+                  />
+                )}
+                {mime.startsWith('video/') && (
+                  <video src={previewUrl} controls style={{ width: '100%', maxHeight: '70vh' }} />
+                )}
+                {mime.startsWith('audio/') && (
+                  <audio src={previewUrl} controls style={{ width: '100%' }} />
+                )}
+                {mime === 'application/pdf' && (
+                  <iframe
+                    title="PDF preview"
+                    src={previewUrl}
+                    style={{ width: '100%', height: '70vh', border: 0 }}
+                  />
+                )}
+                {(mime.startsWith('text/') || mime === 'application/json') && (
+                  <iframe
+                    title="Text preview"
+                    src={previewUrl}
+                    style={{
+                      width: '100%',
+                      height: '60vh',
+                      border: '1px solid rgba(128,128,128,0.3)',
+                    }}
+                  />
+                )}
               </Box>
             )}
           </Stack>

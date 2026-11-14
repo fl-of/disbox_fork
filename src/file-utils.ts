@@ -20,10 +20,12 @@ export async function pickLocationAsWritable(suggestedName: string): Promise<any
   if (suggestedName.includes('.')) {
     const extension = `.${suggestedName.split('.').pop()}`;
     const mimeType = getMimeType(suggestedName);
-    pickerConfig.types = [{
-      description: extension,
-      accept: { [mimeType]: [extension] },
-    }];
+    pickerConfig.types = [
+      {
+        description: extension,
+        accept: { [mimeType]: [extension] },
+      },
+    ];
   }
 
   const fileHandler = await showSaveFilePicker(pickerConfig);
@@ -55,7 +57,11 @@ function splitFileName(originalName: string): { baseName: string; extension: str
   };
 }
 
-export async function getAvailableFileName(fileManager: any, path: string, originalName: string): Promise<string> {
+export async function getAvailableFileName(
+  fileManager: any,
+  path: string,
+  originalName: string,
+): Promise<string> {
   const { baseName, extension } = splitFileName(originalName);
   const suffix = extension ? `.${extension}` : '';
   let name = baseName;
@@ -72,7 +78,9 @@ export async function getAvailableFileName(fileManager: any, path: string, origi
  * Expands a drag-and-drop DataTransfer into { file, path } entries, including
  * files nested inside dropped folders.
  */
-export async function getFilesFromDataTransfer(dataTransfer: DataTransfer): Promise<DroppedFileEntry[]> {
+export async function getFilesFromDataTransfer(
+  dataTransfer: DataTransfer,
+): Promise<DroppedFileEntry[]> {
   const items = dataTransfer.items ? Array.from(dataTransfer.items) : [];
   const entries = items
     .map((item: any) => (item.webkitGetAsEntry ? item.webkitGetAsEntry() : null))
@@ -85,20 +93,21 @@ export async function getFilesFromDataTransfer(dataTransfer: DataTransfer): Prom
     }));
   }
 
-  const readAllEntries = (reader: any): Promise<any[]> => new Promise((resolve, reject) => {
-    const all: any[] = [];
-    const readBatch = () => {
-      reader.readEntries((batch: any[]) => {
-        if (batch.length === 0) {
-          resolve(all);
-        } else {
-          all.push(...batch);
-          readBatch();
-        }
-      }, reject);
-    };
-    readBatch();
-  });
+  const readAllEntries = (reader: any): Promise<any[]> =>
+    new Promise((resolve, reject) => {
+      const all: any[] = [];
+      const readBatch = () => {
+        reader.readEntries((batch: any[]) => {
+          if (batch.length === 0) {
+            resolve(all);
+          } else {
+            all.push(...batch);
+            readBatch();
+          }
+        }, reject);
+      };
+      readBatch();
+    });
 
   const results: DroppedFileEntry[] = [];
   const walk = async (entry: any, prefix: string): Promise<void> => {
@@ -127,8 +136,5 @@ export function encodeShareAttachmentUrls(attachmentUrls: string[]): string {
   for (let i = 0; i < bytes.length; i += chunkSize) {
     binary += String.fromCharCode(...Array.from(bytes.subarray(i, i + chunkSize)));
   }
-  return btoa(binary)
-    .replace(/\+/g, '~')
-    .replace(/\//g, '_')
-    .replace(/=/g, '-');
+  return btoa(binary).replace(/\+/g, '~').replace(/\//g, '_').replace(/=/g, '-');
 }

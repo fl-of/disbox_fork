@@ -58,7 +58,13 @@ function ThemeSwitch({ theme, setTheme }: ThemeSwitchProps) {
   return (
     <div>
       <FormControlLabel
-        control={<ThemeSwitchStyle sx={{ m: 1 }} checked={theme} onChange={(event) => setTheme(event.target.checked)} />}
+        control={
+          <ThemeSwitchStyle
+            sx={{ m: 1 }}
+            checked={theme}
+            onChange={(event) => setTheme(event.target.checked)}
+          />
+        }
         label="Theme"
       />
     </div>

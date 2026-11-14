@@ -10,20 +10,28 @@
 
     const requestId = data.requestId;
     try {
-      const response = await runtimeApi.sendMessage({ message: data.message || data.payload || {} });
-      window.postMessage({
-        source: SOURCE_EXTENSION,
-        type: 'DISBOX_FETCH_RESPONSE',
-        requestId,
-        response,
-      }, '*');
+      const response = await runtimeApi.sendMessage({
+        message: data.message || data.payload || {},
+      });
+      window.postMessage(
+        {
+          source: SOURCE_EXTENSION,
+          type: 'DISBOX_FETCH_RESPONSE',
+          requestId,
+          response,
+        },
+        '*',
+      );
     } catch (error) {
-      window.postMessage({
-        source: SOURCE_EXTENSION,
-        type: 'DISBOX_FETCH_RESPONSE',
-        requestId,
-        response: { error: error && error.message ? error.message : String(error) },
-      }, '*');
+      window.postMessage(
+        {
+          source: SOURCE_EXTENSION,
+          type: 'DISBOX_FETCH_RESPONSE',
+          requestId,
+          response: { error: error && error.message ? error.message : String(error) },
+        },
+        '*',
+      );
     }
   });
 })();

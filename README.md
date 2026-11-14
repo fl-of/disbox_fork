@@ -10,46 +10,59 @@ Using Discord webhooks allows for simple setup, chunked uploads/downloads, multi
 
 ## Features
 
-| Feature | Support | UI | JavaScript/API notes |
-|---|---|---|---|
-| Login using Webhook URL | ✅ | Setup page (validates/connects storage) | `DisboxFileManager.create(webhookUrl)` |
-| Upload files | ✅ | Upload button, drag & drop, transfer queue | `uploadFile(path, file, onProgress)` |
-| Upload folders | ✅ (drag & drop) | Drag & drop folders/files (preserves folder structure) | Uses `ensureDirectory(...)` + uploads |
-| Create folders | ✅ | "New folder" button | `createDirectory(path)` |
-| Download files | ✅ | Row actions / bulk actions / transfer queue | `downloadFile(path, fileSystemWritable, onProgress)` |
-| Share files | ✅ | Share/copy link actions, improved shared file page | `getAttachmentUrls(path)` |
-| Delete files/folders | ✅ | Row actions / bulk actions (recursive folder delete supported) | `deleteFile(path, onProgress)` |
-| Rename | ✅ | Inline rename, rename dialog, actions menu | `renameFile(path, newName)` |
-| Move | ✅ | Move dialog / bulk move / actions menu | `moveFile(path, newParentPath)` |
-| Browse folders | ✅ | Breadcrumbs, folder navigation | `getChildren(path)` |
-| Search / sort / filter | ✅ | Search bar (`ext:` filters), column sort/filter | UI-driven |
-| File icons | ✅ | File type icons in list | UI-driven |
-| File previews | ✅ (supported types) | In-app preview dialog and shared-file preview (images/video/audio/PDF/text, size-limited) | UI-driven |
-| Transfer manager | ✅ | Queue/status/progress/errors/retry for uploads & downloads | UI-driven |
-| Bulk actions & actions menu | ✅ | Multi-select toolbar actions + per-item "More" menu | UI-driven |
-| Responsive/mobile improvements | ✅ (improved) | Responsive layout, collapsible navbar, mobile-friendly interactions | UI-driven |
-| Download folders (zip) | ❌ | - | - |
-| In-app file editor | ❌ | - | Re-upload/overwrite file content is possible |
+| Feature                        | Support              | UI                                                                                                | JavaScript/API notes                                 |
+| ------------------------------ | -------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Login using Webhook URL        | ✅                   | Setup page (validates/connects storage)                                                           | `DisboxFileManager.create(webhookUrl)`               |
+| Upload files                   | ✅                   | Upload files button, multi-file picker, drag & drop, transfer queue                               | `uploadFile(path, file, onProgress)`                 |
+| Upload folders                 | ✅                   | Upload folder picker and drag & drop (preserves folder structure)                                 | Uses `ensureDirectory(...)` + uploads                |
+| Create folders                 | ✅                   | "New folder" button                                                                               | `createDirectory(path)`                              |
+| Download files                 | ✅                   | Row actions / bulk actions / transfer queue, extension-assisted or proxy fallback                 | `downloadFile(...)`, `downloadFileViaExtension(...)` |
+| Download folders (zip)         | ✅ (single folder)   | Folder "Zip" action downloads selected folder as a `.zip`                                         | Client-side recursive download + zip packaging       |
+| Share files                    | ✅                   | Share dialog with copy/regenerate link, expiry guidance, improved shared-file page                | `getAttachmentUrls(path)` + encoded share payload    |
+| Delete files/folders           | ✅                   | Safer delete confirmation dialog (typed confirmation), recursive delete supported                 | `deleteFile(path, onProgress)`                       |
+| Rename                         | ✅                   | Inline rename, rename dialog, actions menu                                                        | `renameFile(path, newName)`                          |
+| Move                           | ✅                   | Move dialog / bulk move / actions menu, destination picker chips, conflict handling (rename/skip) | `moveFile(path, newParentPath)`                      |
+| Browse folders                 | ✅                   | Breadcrumbs, folder navigation                                                                    | `getChildren(path)`                                  |
+| Search / sort / filter         | ✅                   | Search bar (`ext:` filters), column sort/filter                                                   | UI-driven                                            |
+| File icons                     | ✅                   | File type icons in list                                                                           | UI-driven                                            |
+| File previews                  | ✅ (supported types) | In-app preview dialog and shared-file preview (images/video/audio/PDF/text, size-limited)         | UI-driven                                            |
+| Transfer manager               | ✅                   | Queue/status/progress/errors/retry for uploads & downloads, extension status indicator            | UI-driven                                            |
+| Bulk actions & actions menu    | ✅                   | Multi-select toolbar actions + per-item "More" menu                                               | UI-driven                                            |
+| Responsive/mobile improvements | ✅ (improved)        | Responsive layout, collapsible navbar, mobile-friendly interactions                               | UI-driven                                            |
+| Trash / restore                | ❌                   | No backend-backed trash; deletion is permanent after confirmation                                 | -                                                    |
+| In-app file editor             | ❌                   | -                                                                                                 | Re-upload/overwrite file content is possible         |
 
 Suggestions and contributions are welcome!
 
 ## Recent updates (this fork/workspace)
 
-- **Migrated build tooling:** CRA (`react-scripts`) → **Vite**
-- **Upgraded React:** React 17 → **React 18** (`createRoot`)
-- **TypeScript migration:** converted project source to **TypeScript/TSX** (with pragmatic typings and `tsc --noEmit` passing)
-- **UI/UX improvements:**
+- **Tooling/platform**
+  - Migrated build tooling from CRA (`react-scripts`) to **Vite**
+  - Upgraded React 17 → **React 18** (`createRoot`)
+  - Converted source to **TypeScript/TSX** (pragmatic typing, `tsc --noEmit` passing)
+  - Added route-level lazy loading and Vite manual chunking; replaced `react-helmet` with `react-helmet-async`
+  - Added quality/tooling scripts and CI workflow: `typecheck`, `lint`, `format`, `test`, GitHub Actions CI
+- **File manager / UX**
   - Transfer manager (queued/running/completed/failed, progress, retry, clear completed)
-  - Better error/loading/empty states and snackbar notifications
-  - Drag-and-drop file/folder uploads with folder structure preservation
-  - Move/rename dialogs, bulk actions, per-item "More" actions menu
-  - In-app previews for supported file types and improved shared-file page
-  - Responsive layout/accessibility improvements (focus states, collapsible nav, mobile-friendly behavior)
-- **Download reliability improvements:**
-  - More robust fetch/proxy fallback handling and clearer error messages
+  - Bulk actions, per-item "More" actions menu, improved loading/error/empty states
+  - Upload improvements: multi-file upload, folder upload picker, drag-and-drop files/folders with preserved structure
+  - Move/rename dialogs, move conflict handling (rename/skip), safer delete confirmation dialog
+  - Folder download as **zip** (single folder), in-app previews for supported file types, improved shared-file page
+  - Responsive/layout and accessibility improvements
+- **Sharing**
+  - Share dialog with copy/regenerate link and attachment-link expiry guidance
+- **Download reliability & extension support**
+  - More robust direct/proxy fallback handling, clearer errors, per-chunk retries, and expired attachment URL recovery
   - Configurable download proxy via `VITE_DOWNLOAD_PROXY_URL`
   - Configurable extension ID(s) via `VITE_DISBOX_EXTENSION_ID` / `VITE_DISBOX_EXTENSION_IDS`
-- **Firefox extension:** added `firefox-extension/` (MV2) with a content-script bridge for download assistance (separate from the main web app), including support for AMO-signed builds using the extension ID `disbox-downloader@example.local`
+  - Extension-aware downloads with capability detection and automatic fallback
+- **Firefox extension (`firefox-extension/`, MV2)**
+  - Content-script bridge for reliable page↔extension messaging
+  - Direct download support via browser Downloads API (preferred, avoids page CORS/data URL handoff to page)
+  - Legacy fetch-to-data-URL fallback path retained for compatibility
+  - Updated manifest/permissions and versioning for AMO validation (current extension package: `0.1.2`)
+- **Testing/docs**
+  - Added Vitest-based unit tests for utility/share logic and `docs/QA_CHECKLIST.md` for manual cross-browser QA
 
 ## How it works
 
@@ -58,58 +71,79 @@ Disbox splits uploaded files into chunks to fit Discord attachment limits, uploa
 ## Technical details
 
 ### Database
+
 Disbox stores file metadata and message/chunk references in a backend database. Webhook URLs are used as account identifiers (hashed client-side in this implementation). The database does not provide direct access to Discord attachments by itself.
 
 ### Discord API (Webhooks)
+
 Webhooks are used instead of bots because they are easier for users to set up and require minimal Discord configuration.
 
 ### CORS and downloads
+
 Browsers cannot reliably fetch Discord CDN attachment URLs directly from a web page due to CORS restrictions. This project supports:
-- **Browser extension (recommended):** fetches attachment data from an extension context with appropriate permissions
+
+- **Browser extension (recommended):** detects compatible extensions, can perform direct downloads from the extension context (bypassing page CORS), and falls back automatically when unavailable/failing
 - **Proxy fallback:** attempts direct/proxy fetch strategies when extension download is unavailable (third-party proxies can be unreliable/blocked and may expose request data to the proxy)
 
-For self-hosted/reliable setups, you can configure a custom proxy endpoint with `VITE_DOWNLOAD_PROXY_URL`.
+For self-hosted/reliable setups, you can configure a custom proxy endpoint with `VITE_DOWNLOAD_PROXY_URL`. Downloads also include retry/expired-link recovery logic to improve reliability.
 
 ## Development
 
 ### Prerequisites
+
 - Node.js + npm
 
 ### Install
+
 ```bash
 npm install
 ```
 
 ### Run locally (development)
+
 ```bash
 npm run dev
 ```
+
 Open the local URL shown by Vite (typically `http://localhost:5173/`).
 
 ### Production build
+
 ```bash
 npm run build
 ```
+
 Outputs static files to `dist/` (built for the `/web/` base path).
 
 Preview the production build locally:
+
 ```bash
 npm run preview:prod
 ```
+
 Then open the URL shown (including `/web/`, e.g. `http://localhost:3000/web/`).
 
-### Type checking
+### Quality checks & tests
+
 ```bash
-npx tsc --noEmit
+npm run typecheck
+npm run lint
+npm run format
+npm run test
+# or run typecheck + lint + format + test
+npm run check
 ```
 
 ### Deploy
+
 ```bash
 npm run deploy
 ```
+
 Publishes `dist/` via `gh-pages`.
 
 ## Environment variables (`.env`)
+
 Create a `.env` file in the project root to configure build-time variables:
 
 ```env
@@ -132,14 +166,18 @@ Create a `.env` file in the project root to configure build-time variables:
 **Important:** Vite env variables are embedded at **dev server start/build time**. After changing `.env`, restart `npm run dev` or rebuild (`npm run build` / `npm run preview:prod`).
 
 ## Firefox extension
+
 A Firefox extension implementation is available in `firefox-extension/` to assist with downloads by fetching Discord attachment URLs from the extension context (bypassing page CORS restrictions).
 
 - **Source/location:** `firefox-extension/` (manifest, background script, content-script bridge, icons)
-- **Temporary/local load:** `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on...** → `firefox-extension/manifest.json`
-- **Allowed origins (content-script bridge):** `http://localhost/*`, `http://127.0.0.1/*`, `https://localhost/*`, `https://127.0.0.1/*`, `https://disboxapp.github.io/*`
 - **Extension ID:** `disbox-downloader@example.local` (as configured in this repo’s Firefox extension manifest)
+- **Capabilities:** direct download via browser Downloads API (preferred), capability detection/ping, and legacy fetch fallback path
+- **Allowed origins (content-script bridge):** `http://localhost/*`, `http://127.0.0.1/*`, `https://localhost/*`, `https://127.0.0.1/*`, `https://disboxapp.github.io/*`
+- **Temporary/local load:** `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on...** → `firefox-extension/manifest.json`
+- **Current packaged manifest version in repo:** `0.1.2` (submitted for AMO review; approval status may change over time)
 
 ### Using the Firefox extension with this web app
+
 The web app must be configured to message the extension ID, and the build must include that configuration:
 
 1. Install/load the Firefox extension (temporary or signed `.xpi`)
@@ -150,14 +188,18 @@ The web app must be configured to message the extension ID, and the build must i
 3. Restart/rebuild the web app (`npm run dev`, or `npm run build` / `npm run preview:prod`)
 4. Open the app on an allowed origin (e.g. `http://localhost:5173/`)
 
-> Note: The extension being installed in Firefox is separate from the website code. A deployed site (e.g. `https://disboxapp.github.io/web`) will only use this Firefox extension if that deployed build is configured with the matching extension ID.
+> Note: Installing the extension in Firefox is separate from the website code. A deployed site (e.g. `https://disboxapp.github.io/web`) will only use this Firefox extension if that deployed build is configured with the matching extension ID.
 
-See `firefox-extension/README.md` for more details and limitations.
+See `firefox-extension/README.md` for details/limitations and `docs/QA_CHECKLIST.md` for manual validation scenarios.
 
 ## Notes
-- Discord attachment URLs can expire; if a shared/download link stops working, generate a fresh share link or re-fetch/download again.
+
+- Discord attachment URLs can expire; if a shared/download link stops working, regenerate the share link or retry the download (the app attempts expired-link recovery in supported flows).
 - Public CORS proxies may fail or be blocked; a browser extension or a trusted/self-hosted proxy is more reliable for downloads.
+- Deletions are permanent after confirmation (no trash/restore).
+- Folder zip download is currently client-side and may be memory-intensive for very large folders/files.
 - Keep webhook URLs private (they grant access to the associated storage).
 
 ## License
+
 See [LICENSE](LICENSE).

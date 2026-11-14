@@ -1,9 +1,10 @@
 {
   "manifest_version": 2,
   "name": "Disbox Downloader for Firefox",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Helps the Disbox web app download files from Discord by fetching attachment URLs from the extension context (bypassing page CORS restrictions).",
   "permissions": [
+    "downloads",
     "storage",
     "https://cdn.discordapp.com/*",
     "https://media.discordapp.net/*",
@@ -30,7 +31,7 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "disbox-downloader@example.local",
-      "strict_min_version": "109.0",
+      "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": ["none"]
       }

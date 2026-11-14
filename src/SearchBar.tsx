@@ -46,7 +46,9 @@ function SearchBar({
     const queue: any[] = [''];
     while (queue.length > 0) {
       const current = queue.pop();
-      const children = fileManager.getChildren(typeof current === 'string' ? current : (current.path || ''));
+      const children = fileManager.getChildren(
+        typeof current === 'string' ? current : current.path || '',
+      );
       Object.values(children).forEach((f: any) => {
         if (f.type === 'directory') {
           queue.push(f);
@@ -99,7 +101,9 @@ function SearchBar({
           if (advancedOptions === null) {
             advancedOptions = new Set(byExtension[type]);
           } else {
-            advancedOptions = new Set([...advancedOptions].filter((p) => byExtension[type].includes(p)));
+            advancedOptions = new Set(
+              [...advancedOptions].filter((p) => byExtension[type].includes(p)),
+            );
           }
         }
       }

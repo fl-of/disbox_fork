@@ -44,11 +44,15 @@ export function loadFileManager(force = false): Promise<DisboxFileManager | null
 }
 
 export default function useFileManager() {
-  const [state, setState] = useState<{ fileManager: DisboxFileManager | null; loading: boolean; error: any }>(() => (
+  const [state, setState] = useState<{
+    fileManager: DisboxFileManager | null;
+    loading: boolean;
+    error: any;
+  }>(() =>
     cachedManager
       ? { fileManager: cachedManager, loading: false, error: null }
-      : { fileManager: null, loading: true, error: null }
-  ));
+      : { fileManager: null, loading: true, error: null },
+  );
   const mounted = useRef(true);
 
   const load = useCallback(async (force = false) => {

@@ -1,7 +1,4 @@
-/*global chrome*/
 import { sha256 } from 'js-sha256';
-
-declare const chrome: any;
 
 export type ProgressCallback = ((value: number, total: number) => void) | null | undefined;
 
@@ -33,7 +30,11 @@ const UPLOAD_CONCURRENCY = 4;
 const DOWNLOAD_CONCURRENCY = 3;
 const API_CONCURRENCY = 4;
 const DEFAULT_EXTENSION_ID = 'jklpfhklkhbfgeencifbmkoiaokeieah';
-const CONFIGURED_EXTENSION_IDS = (import.meta.env.VITE_DISBOX_EXTENSION_IDS || import.meta.env.VITE_DISBOX_EXTENSION_ID || '')
+const CONFIGURED_EXTENSION_IDS = (
+  import.meta.env.VITE_DISBOX_EXTENSION_IDS ||
+  import.meta.env.VITE_DISBOX_EXTENSION_ID ||
+  ''
+)
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
@@ -45,27 +46,34 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * Runs `worker` over `items` with at most `limit` concurrent invocations.
  * Results keep the same order as the input array.
  */
-async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T, index: number) => Promise<R>): Promise<R[]> {
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
   const results = new Array<R>(items.length);
   let nextIndex = 0;
   let firstError: unknown = null;
 
-  const runners = Array.from({ length: Math.max(1, Math.min(limit, items.length || 1)) }, async () => {
-    while (!firstError) {
-      const index = nextIndex++;
-      if (index >= items.length) {
-        return;
-      }
-      try {
-        results[index] = await worker(items[index], index);
-      } catch (error) {
-        if (!firstError) {
-          firstError = error;
+  const runners = Array.from(
+    { length: Math.max(1, Math.min(limit, items.length || 1)) },
+    async () => {
+      while (!firstError) {
+        const index = nextIndex++;
+        if (index >= items.length) {
+          return;
         }
-        return;
+        try {
+          results[index] = await worker(items[index], index);
+        } catch (error) {
+          if (!firstError) {
+            firstError = error;
+          }
+          return;
+        }
       }
-    }
-  });
+    },
+  );
 
   await Promise.all(runners);
   if (firstError) {
@@ -93,55 +101,11 @@ function getExtensionRuntime(): any | null {
   return null;
 }
 
-function hasExtensionApi(): boolean {
-  return getExtensionRuntime() !== null || typeof window !== 'undefined';
-}
-
-async function fetchUrlViaContentScriptBridge(url: string): Promise<string | null> {
-  if (typeof window === 'undefined') return null;
-
-  return await new Promise<string | null>((resolve) => {
-    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    let settled = false;
-
-    const cleanup = () => {
-      window.removeEventListener('message', onMessage);
-      clearTimeout(timeout);
-    };
-
-    const finish = (value: string | null) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve(value);
-    };
-
-    const onMessage = (event: MessageEvent) => {
-      if (event.source !== window) return;
-      const data: any = event.data;
-      if (!data || data.source !== 'disbox-extension' || data.type !== 'DISBOX_FETCH_RESPONSE') return;
-      if (data.requestId !== requestId) return;
-      const response = data.response;
-      if (response && response.data) {
-        finish(response.data as string);
-      } else {
-        finish(null);
-      }
-    };
-
-    const timeout = setTimeout(() => finish(null), 30000);
-
-    window.addEventListener('message', onMessage);
-    window.postMessage({
-      source: 'disbox-page',
-      type: 'DISBOX_FETCH',
-      requestId,
-      message: { url },
-    }, '*');
-  });
-}
-
-async function sendMessageToExtension(runtime: any, extensionId: string, payload: any): Promise<any> {
+async function sendMessageToExtension(
+  runtime: any,
+  extensionId: string,
+  payload: any,
+): Promise<any> {
   // Try callback style first (Chrome/page compatibility), then Promise style.
   try {
     const callbackResult = await new Promise<any>((resolve) => {
@@ -181,30 +145,80 @@ async function sendMessageToExtension(runtime: any, extensionId: string, payload
   }
 }
 
-async function fetchUrlFromExtension(url: string): Promise<string | null> {
+async function sendToExtension(payload: any, timeoutMs = 30000): Promise<any | null> {
   // Preferred path for Firefox/local extension: content-script bridge via window.postMessage.
-  const bridged = await fetchUrlViaContentScriptBridge(url);
-  if (bridged) {
-    return bridged;
+  if (typeof window !== 'undefined') {
+    const bridged = await new Promise<any | null>((resolve) => {
+      const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      let settled = false;
+      const cleanup = () => {
+        window.removeEventListener('message', onMessage);
+        clearTimeout(timeout);
+      };
+      const finish = (value: any | null) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(value);
+      };
+      const onMessage = (event: MessageEvent) => {
+        if (event.source !== window) return;
+        const data: any = event.data;
+        if (!data || data.source !== 'disbox-extension' || data.type !== 'DISBOX_FETCH_RESPONSE')
+          return;
+        if (data.requestId !== requestId) return;
+        finish(data.response ?? null);
+      };
+      const timeout = setTimeout(() => finish(null), timeoutMs);
+      window.addEventListener('message', onMessage);
+      window.postMessage(
+        { source: 'disbox-page', type: 'DISBOX_FETCH', requestId, message: payload },
+        '*',
+      );
+    });
+    if (bridged) return bridged;
   }
 
   const runtime = getExtensionRuntime();
-  if (!runtime) {
-    return null;
-  }
+  if (!runtime) return null;
 
   for (const extensionId of EXTENSION_IDS) {
     try {
-      const response = await sendMessageToExtension(runtime, extensionId, { message: { url } });
-      if (response && response.data) {
-        return response.data as string;
-      }
+      const response = await sendMessageToExtension(runtime, extensionId, { message: payload });
+      if (response) return response;
     } catch {
       // try next extension id
     }
   }
-
   return null;
+}
+
+export async function detectExtensionDownloadSupport(): Promise<{
+  available: boolean;
+  canDirectDownload: boolean;
+}> {
+  const response = await sendToExtension({}, 2000);
+  if (!response || !response.installed) {
+    return { available: false, canDirectDownload: false };
+  }
+  const caps = Array.isArray(response.capabilities) ? response.capabilities : [];
+  return { available: true, canDirectDownload: caps.includes('download') };
+}
+
+async function fetchUrlFromExtension(url: string): Promise<string | null> {
+  const response = await sendToExtension({ url });
+  if (response && response.data) {
+    return response.data as string;
+  }
+  return null;
+}
+
+async function downloadViaExtension(filename: string, urls: string[]): Promise<boolean> {
+  const response = await sendToExtension(
+    { action: 'download', filename, urls },
+    Math.max(30000, urls.length * 30000),
+  );
+  return Boolean(response && (response.ok || response.downloadId));
 }
 
 const CONFIGURED_DOWNLOAD_PROXY = (import.meta.env.VITE_DOWNLOAD_PROXY_URL || '').trim();
@@ -237,16 +251,55 @@ function getErrorMessage(error: unknown): string {
   return String(error || 'unknown error');
 }
 
+function isRetryableDownloadError(error: unknown): boolean {
+  const msg = getErrorMessage(error).toLowerCase();
+  return (
+    msg.includes('networkerror') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('timeout') ||
+    msg.includes('http 429') ||
+    msg.includes('http 5')
+  );
+}
+
+function isExpiredOrMissingError(error: unknown): boolean {
+  const msg = getErrorMessage(error).toLowerCase();
+  return (
+    msg.includes('http 401') ||
+    msg.includes('http 403') ||
+    msg.includes('http 404') ||
+    msg.includes('http 410')
+  );
+}
+
 async function fetchBlob(url: string): Promise<Blob> {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
   const blob = await response.blob();
+  // Empty chunk may be valid for empty files, but usually indicates a bad proxy response.
   if (blob.size === 0) {
     throw new Error('Empty response');
   }
   return blob;
+}
+
+async function fetchUrlWithRetry(url: string, retries = 2): Promise<Blob> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fetchUrl(url);
+    } catch (error) {
+      lastError = error;
+      if (attempt < retries && isRetryableDownloadError(error)) {
+        await sleep(300 * (attempt + 1));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
 }
 
 async function fetchUrl(url: string): Promise<Blob> {
@@ -286,7 +339,7 @@ export async function downloadFromAttachmentUrls(
   attachmentUrls: string[],
   writeStream: WriteStreamLike,
   onProgress: ProgressCallback = null,
-  fileSize: number | string = -1
+  fileSize: number | string = -1,
 ): Promise<void> {
   const total = Array.isArray(attachmentUrls) ? attachmentUrls.length : 0;
   let bytesDownloaded = 0;
@@ -319,9 +372,10 @@ export async function downloadFromAttachmentUrls(
     }
   };
 
-  const waitForData = () => new Promise<void>((resolve) => {
-    waitResolve = resolve;
-  });
+  const waitForData = () =>
+    new Promise<void>((resolve) => {
+      waitResolve = resolve;
+    });
 
   const fetchWorker = async () => {
     while (!fetchError) {
@@ -330,7 +384,7 @@ export async function downloadFromAttachmentUrls(
         return;
       }
       try {
-        const blob = await fetchUrl(attachmentUrls[index]);
+        const blob = await fetchUrlWithRetry(attachmentUrls[index], 2);
         blobs[index] = blob;
         bytesDownloaded += blob.size;
         if (onProgress) {
@@ -406,7 +460,10 @@ class DiscordWebhookClient {
     this.retryCounts = {};
   }
 
-  async fetchFromApi(path: string, { type, method, body }: { type: string; method: string; body?: BodyInit | null }): Promise<Response> {
+  async fetchFromApi(
+    path: string,
+    { type, method, body }: { type: string; method: string; body?: BodyInit | null },
+  ): Promise<Response> {
     const wait = this.rateLimitWaits[type] || 0;
     if (wait > 0) {
       console.log(`Waiting ${Math.ceil(wait)}ms for rate limit to reset`);
@@ -420,8 +477,12 @@ class DiscordWebhookClient {
 
     const remainingRequests = Number(response.headers.get('X-RateLimit-Remaining'));
     const resetAfter = Number(response.headers.get('X-RateLimit-Reset-After'));
-    if (Number.isFinite(remainingRequests) && remainingRequests <= 0
-      && Number.isFinite(resetAfter) && resetAfter > 0) {
+    if (
+      Number.isFinite(remainingRequests) &&
+      remainingRequests <= 0 &&
+      Number.isFinite(resetAfter) &&
+      resetAfter > 0
+    ) {
       this.rateLimitWaits[type] = Math.max(resetAfter * 1000, 250);
     } else {
       this.rateLimitWaits[type] = 0;
@@ -430,7 +491,7 @@ class DiscordWebhookClient {
     if (response.status === 429) {
       let retryAfter = 1;
       try {
-        const bodyJson = await response.json() as any;
+        const bodyJson = (await response.json()) as any;
         retryAfter = Number(bodyJson.retry_after) || 1;
       } catch {
         // Use the default retry delay.
@@ -442,7 +503,9 @@ class DiscordWebhookClient {
 
       if (this.retryCounts[type] > 5) {
         this.retryCounts[type] = 0;
-        throw new Error('Discord is rate limiting this webhook. Please wait a moment and try again.');
+        throw new Error(
+          'Discord is rate limiting this webhook. Please wait a moment and try again.',
+        );
       }
 
       console.log(`Rate limit exceeded, retrying in ${waitMs}ms`);
@@ -501,7 +564,11 @@ class DiscordFileStorage {
     });
   }
 
-  async upload(sourceFile: Blob, namePrefix: string | number | undefined, onProgress: ProgressCallback = null): Promise<string[]> {
+  async upload(
+    sourceFile: Blob,
+    namePrefix: string | number | undefined,
+    onProgress: ProgressCallback = null,
+  ): Promise<string[]> {
     if (onProgress) {
       onProgress(0, sourceFile.size);
     }
@@ -523,7 +590,7 @@ class DiscordFileStorage {
         try {
           const result = await this.webhookClient.sendAttachment(
             `${namePrefix}_${index}`,
-            new Blob([value as ArrayBuffer])
+            new Blob([value as ArrayBuffer]),
           );
           messageIds[index] = result.id;
           uploadedBytes += (value as ArrayBuffer).byteLength;
@@ -548,9 +615,37 @@ class DiscordFileStorage {
     return messageIds;
   }
 
-  async download(messageIds: Array<string | number>, writeStream: WriteStreamLike, onProgress: ProgressCallback = null, fileSize = -1): Promise<void> {
-    const attachmentUrls = await this.getAttachmentUrls(messageIds);
-    await downloadFromAttachmentUrls(attachmentUrls, writeStream, onProgress, fileSize);
+  async download(
+    messageIds: Array<string | number>,
+    writeStream: WriteStreamLike,
+    onProgress: ProgressCallback = null,
+    fileSize = -1,
+  ): Promise<void> {
+    let attachmentUrls = await this.getAttachmentUrls(messageIds);
+    try {
+      await downloadFromAttachmentUrls(attachmentUrls, writeStream, onProgress, fileSize);
+    } catch (error) {
+      // Retry once with freshly fetched attachment URLs in case links expired.
+      if (isExpiredOrMissingError(error)) {
+        attachmentUrls = await this.getAttachmentUrls(messageIds);
+        await downloadFromAttachmentUrls(attachmentUrls, writeStream, onProgress, fileSize);
+        return;
+      }
+      throw error;
+    }
+  }
+
+  async downloadToExtension(
+    messageIds: Array<string | number>,
+    filename: string,
+  ): Promise<boolean> {
+    let attachmentUrls = await this.getAttachmentUrls(messageIds);
+    let ok = await downloadViaExtension(filename, attachmentUrls);
+    if (ok) return true;
+    // Retry once with fresh URLs if the extension path failed (possibly expired links).
+    attachmentUrls = await this.getAttachmentUrls(messageIds);
+    ok = await downloadViaExtension(filename, attachmentUrls);
+    return ok;
   }
 
   async delete(messageIds: Array<string | number>, onProgress?: ProgressCallback): Promise<void> {
@@ -612,7 +707,7 @@ class DisboxFileManager {
       try {
         const result = await fetch(`${SERVER_URL}/files/get/${sha256(url.href)}`);
         if (result.ok) {
-          fileTrees[url.href] = await result.json() as FileNode;
+          fileTrees[url.href] = (await result.json()) as FileNode;
         }
       } catch {
         // Try the next hostname.
@@ -696,7 +791,10 @@ class DisboxFileManager {
     return this.getFile(`/${parts.slice(0, -1).join(FILE_DELIMITER)}`, false);
   }
 
-  async updateFile(path: string, changes: Partial<FileNode> & Record<string, any>): Promise<FileNode> {
+  async updateFile(
+    path: string,
+    changes: Partial<FileNode> & Record<string, any>,
+  ): Promise<FileNode> {
     const file = this.getFile(path, false);
     if (!file) {
       throw new Error(`File not found: ${path}`);
@@ -794,7 +892,12 @@ class DisboxFileManager {
       throw new Error(`File not found: ${path}`);
     }
 
-    const filesToDelete: Array<{ path: string; name: string; id?: number | null; contentReferences: string[] }> = [];
+    const filesToDelete: Array<{
+      path: string;
+      name: string;
+      id?: number | null;
+      contentReferences: string[];
+    }> = [];
     const directoriesToDelete: Array<{ path: string; name: string; id?: number | null }> = [];
 
     const collect = (nodePath: string, node: FileNode | null) => {
@@ -847,7 +950,9 @@ class DisboxFileManager {
       reportProgress();
     }
 
-    directoriesToDelete.sort((a, b) => b.path.split(FILE_DELIMITER).length - a.path.split(FILE_DELIMITER).length);
+    directoriesToDelete.sort(
+      (a, b) => b.path.split(FILE_DELIMITER).length - a.path.split(FILE_DELIMITER).length,
+    );
     for (const directory of directoriesToDelete) {
       const result = await fetch(`${SERVER_URL}/files/delete/${this.userId}/${directory.id}`, {
         method: 'DELETE',
@@ -939,7 +1044,11 @@ class DisboxFileManager {
     return this.getFile(path);
   }
 
-  async uploadFile(path: string, fileBlob: Blob, onProgress?: ProgressCallback): Promise<FileNode | null> {
+  async uploadFile(
+    path: string,
+    fileBlob: Blob,
+    onProgress?: ProgressCallback,
+  ): Promise<FileNode | null> {
     let file = this.getFile(path, false);
     if (!file) {
       await this.createFile(path);
@@ -950,7 +1059,11 @@ class DisboxFileManager {
     }
 
     const oldContentReferences = parseContentReferences(file);
-    const contentReferences = await this.discordFileStorage.upload(fileBlob, file.id as any, onProgress);
+    const contentReferences = await this.discordFileStorage.upload(
+      fileBlob,
+      file.id as any,
+      onProgress,
+    );
 
     if (oldContentReferences.length > 0) {
       try {
@@ -971,7 +1084,11 @@ class DisboxFileManager {
     return this.getFile(path);
   }
 
-  async downloadFile(path: string, writeStream: WriteStreamLike, onProgress?: ProgressCallback): Promise<void> {
+  async downloadFile(
+    path: string,
+    writeStream: WriteStreamLike,
+    onProgress?: ProgressCallback,
+  ): Promise<void> {
     const file = this.getFile(path);
     if (!file) {
       throw new Error(`File not found: ${path}`);
@@ -980,12 +1097,34 @@ class DisboxFileManager {
       throw new Error(`Cannot download content from directory: ${path}`);
     }
 
-    await this.discordFileStorage.download(
-      parseContentReferences(file),
-      writeStream,
-      onProgress,
-      file.size || -1
-    );
+    const messageIds = parseContentReferences(file);
+    try {
+      await this.discordFileStorage.download(messageIds, writeStream, onProgress, file.size || -1);
+    } catch (error) {
+      const msg = getErrorMessage(error);
+      if (isExpiredOrMissingError(error)) {
+        throw new Error(
+          `Download failed because attachment links may have expired or are unavailable. ${msg}`,
+        );
+      }
+      throw new Error(`Download failed: ${msg}`);
+    }
+  }
+
+  async downloadFileViaExtension(path: string): Promise<boolean> {
+    const file = this.getFile(path);
+    if (!file) {
+      throw new Error(`File not found: ${path}`);
+    }
+    if (file.type === 'directory') {
+      throw new Error(`Cannot download content from directory: ${path}`);
+    }
+    const messageIds = parseContentReferences(file);
+    try {
+      return await this.discordFileStorage.downloadToExtension(messageIds, file.name);
+    } catch {
+      return false;
+    }
   }
 
   async getAttachmentUrls(path: string): Promise<string[]> {

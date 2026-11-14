@@ -14,7 +14,7 @@ export default function buildColumns(
   currentAction: string,
   onShareClick: (params: GridRenderCellParams) => void | Promise<void>,
   onDownloadClick: (params: GridRenderCellParams) => void | Promise<void>,
-  onDeleteClick: (params: GridRenderCellParams) => void | Promise<void>
+  onDeleteClick: (params: GridRenderCellParams) => void | Promise<void>,
 ): GridColDef[] {
   return [
     {
@@ -22,7 +22,11 @@ export default function buildColumns(
       headerName: '',
       width: 0,
       renderCell: (params: GridRenderCellParams) => (
-        <FileIcon mimeType={params.row.type === 'directory' ? 'inode/directory' : getMimeType(params.row.name)} />
+        <FileIcon
+          mimeType={
+            params.row.type === 'directory' ? 'inode/directory' : getMimeType(params.row.name)
+          }
+        />
       ),
       disableColumnMenu: true,
       sortable: false,
@@ -83,18 +87,18 @@ export default function buildColumns(
     {
       field: 'download',
       headerName: 'Download',
-      width: 120,
+      width: 130,
       renderCell: (params: GridRenderCellParams) => (
         <div>
           <Button
-            disabled={currentAction !== '' || params.row.type === 'directory'}
+            disabled={currentAction !== ''}
             variant="text"
             color="primary"
             onClick={async () => {
               await onDownloadClick(params);
             }}
           >
-            Download
+            {params.row.type === 'directory' ? 'Zip' : 'Download'}
           </Button>
         </div>
       ),
