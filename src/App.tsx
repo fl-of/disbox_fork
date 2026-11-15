@@ -10,11 +10,13 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   IconButton,
   Menu,
   MenuItem,
   Snackbar,
   Stack,
+  Switch,
   TextField,
   Tooltip,
   Typography,
@@ -143,6 +145,13 @@ function App() {
     available: boolean;
     canDirectDownload: boolean;
   }>({ available: false, canDirectDownload: false });
+  const [encryptUploads, setEncryptUploads] = useState<boolean>(
+    () => localStorage.getItem('disboxEncryptUploads') === 'true',
+  );
+  const [encryptionPassphrase, setEncryptionPassphrase] = useState<string>(
+    () => localStorage.getItem('disboxEncryptionPassphrase') || '',
+  );
+  const [encryptionDialogOpen, setEncryptionDialogOpen] = useState<boolean>(false);
 
   const notify = useCallback((message: string, severity: Severity = 'info') => {
     setSnackbar({ open: true, message: String(message), severity });
@@ -151,6 +160,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem('theme', theme ? 'dark' : 'light');
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem('disboxEncryptUploads', encryptUploads ? 'true' : 'false');
+  }, [encryptUploads]);
+
+  useEffect(() => {
+    localStorage.setItem('disboxEncryptionPassphrase', encryptionPassphrase || '');
+  }, [encryptionPassphrase]);
 
   useEffect(
     () => () => {
@@ -257,11 +274,18 @@ function App() {
               try {
                 if (t.type === 'upload') {
                   const { file, targetPath } = t.payload as { file: File; targetPath: string };
-                  await fileManager.uploadFile(targetPath, file, (value: number, total: number) => {
-                    updateTransfer(id, {
-                      progress: total > 0 ? Math.round((value / total) * 100) : 0,
-                    });
-                  });
+                  await fileManager.uploadFile(
+                    targetPath,
+                    file,
+                    (value: number, total: number) => {
+                      updateTransfer(id, {
+                        progress: total > 0 ? Math.round((value / total) * 100) : 0,
+                      });
+                    },
+                    encryptUploads && encryptionPassphrase
+                      ? { encrypt: true, passphrase: encryptionPassphrase }
+                      : undefined,
+                  );
                   updateTransfer(id, { status: 'completed', progress: 100 });
                   const dir = targetPath.split(FILE_DELIMITER).slice(0, -1).join(FILE_DELIMITER);
                   if (normalizePath(dir) === normalizePath(path)) {
@@ -299,6 +323,7 @@ function App() {
                           progress: total > 0 ? Math.round((value / total) * 100) : 0,
                         });
                       },
+                      encryptionPassphrase ? { passphrase: encryptionPassphrase } : undefined,
                     );
                   }
                   updateTransfer(id, { status: 'completed', progress: 100 });
@@ -324,6 +349,8 @@ function App() {
       await transferRunRef.current.catch(() => {});
     },
     [
+      encryptUploads,
+      encryptionPassphrase,
       extensionStatus.canDirectDownload,
       fileManager,
       notify,
@@ -505,7 +532,12 @@ function App() {
           },
           close: async () => {},
         };
-        await fileManager.downloadFile(row.path as string, writable, null);
+        await fileManager.downloadFile(
+          row.path as string,
+          writable,
+          null,
+          encryptionPassphrase ? { passphrase: encryptionPassphrase } : undefined,
+        );
         const mime = getMimeType(row.name) || 'application/octet-stream';
         const blob = new Blob(chunks, { type: mime });
         if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
@@ -523,7 +555,7 @@ function App() {
         });
       }
     },
-    [fileManager],
+    [encryptionPassphrase, fileManager],
   );
 
   const generateShareUrl = useCallback(
@@ -615,7 +647,12 @@ function App() {
             close: async () => {},
           };
           // eslint-disable-next-line no-await-in-loop
-          await fileManager.downloadFile(file.path as string, writable, null);
+          await fileManager.downloadFile(
+            file.path as string,
+            writable,
+            null,
+            encryptionPassphrase ? { passphrase: encryptionPassphrase } : undefined,
+          );
           zip.file(rel || file.name, new Blob(chunks));
           if ((i + 1) % 3 === 0 || i === files.length - 1) {
             notify(`Zipping "${folder.name}": ${i + 1}/${files.length} files`, 'info');
@@ -637,7 +674,7 @@ function App() {
         setBusy(false);
       }
     },
-    [collectFilesRecursive, fileManager, notify],
+    [collectFilesRecursive, encryptionPassphrase, fileManager, notify],
   );
 
   const handleDownloadRows = useCallback(
@@ -1117,6 +1154,22 @@ function App() {
             Transfers{runningCount ? ` (${runningCount})` : ''}
             {failedCount ? `, ${failedCount} failed` : ''}
           </Button>
+          <Tooltip title="Configure client-side encryption for new uploads">
+            <Chip
+              size="small"
+              clickable
+              onClick={() => setEncryptionDialogOpen(true)}
+              color={encryptUploads && encryptionPassphrase ? 'success' : 'default'}
+              label={
+                encryptUploads && encryptionPassphrase
+                  ? 'Encryption: on'
+                  : encryptUploads
+                    ? 'Encryption: needs passphrase'
+                    : 'Encryption: off'
+              }
+              variant={encryptUploads ? 'filled' : 'outlined'}
+            />
+          </Tooltip>
           <Tooltip title="Click to re-check extension">
             <Chip
               size="small"
@@ -1539,6 +1592,12 @@ function App() {
               Discord attachment URLs remain valid and can expire/regenerate over time; use
               “Regenerate link” to fetch fresh URLs.
             </MuiAlert>
+            {shareDialog.row && fileManager?.isFileEncrypted(shareDialog.row.path as string) && (
+              <MuiAlert severity="warning" sx={{ mb: 2 }}>
+                This file is encrypted. The share link does not include the encryption passphrase,
+                so recipients cannot auto-decrypt it from the link alone.
+              </MuiAlert>
+            )}
             {shareDialog.loading && (
               <Typography color="text.secondary">Generating link...</Typography>
             )}
@@ -1585,6 +1644,48 @@ function App() {
             >
               Copy link
             </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={encryptionDialogOpen}
+          onClose={() => setEncryptionDialogOpen(false)}
+          fullWidth
+          maxWidth="sm"
+        >
+          <DialogTitle>Client-side encryption</DialogTitle>
+          <DialogContent>
+            <MuiAlert severity="info" sx={{ mb: 2 }}>
+              When enabled, new uploads are encrypted in your browser before chunks are sent to
+              Discord. Downloads/previews are auto-decrypted in this app when the correct passphrase
+              is configured.
+            </MuiAlert>
+            <MuiAlert severity="warning" sx={{ mb: 2 }}>
+              The passphrase is stored in this browser&apos;s local storage for convenience. If you
+              forget it, encrypted files cannot be recovered. Encrypted share links do not include
+              the passphrase.
+            </MuiAlert>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={encryptUploads}
+                  onChange={(e) => setEncryptUploads(e.target.checked)}
+                />
+              }
+              label="Encrypt new uploads"
+            />
+            <TextField
+              fullWidth
+              margin="dense"
+              type="password"
+              label="Encryption passphrase"
+              value={encryptionPassphrase}
+              onChange={(e) => setEncryptionPassphrase(e.target.value)}
+              helperText="Required for encrypted uploads and to auto-decrypt encrypted downloads/previews."
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setEncryptionDialogOpen(false)}>Close</Button>
           </DialogActions>
         </Dialog>
 

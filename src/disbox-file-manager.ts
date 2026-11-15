@@ -1,4 +1,14 @@
 import { sha256 } from 'js-sha256';
+import {
+  assertPassphrase,
+  createEncryptionContext,
+  decryptChunk,
+  encryptChunk,
+  keyFromMeta,
+  parseStoredFileContent,
+  serializeStoredFileContent,
+  type EncryptionMeta,
+} from './utils/crypto';
 
 export type ProgressCallback = ((value: number, total: number) => void) | null | undefined;
 
@@ -340,6 +350,7 @@ export async function downloadFromAttachmentUrls(
   writeStream: WriteStreamLike,
   onProgress: ProgressCallback = null,
   fileSize: number | string = -1,
+  decryption?: { key: CryptoKey; meta: EncryptionMeta } | null,
 ): Promise<void> {
   const total = Array.isArray(attachmentUrls) ? attachmentUrls.length : 0;
   let bytesDownloaded = 0;
@@ -384,10 +395,16 @@ export async function downloadFromAttachmentUrls(
         return;
       }
       try {
-        const blob = await fetchUrlWithRetry(attachmentUrls[index], 2);
+        let blob = await fetchUrlWithRetry(attachmentUrls[index], 2);
+        if (decryption) {
+          const cipherBuf = await blob.arrayBuffer();
+          const plainBuf = await decryptChunk(decryption.key, decryption.meta, index, cipherBuf);
+          blob = new Blob([plainBuf]);
+        }
         blobs[index] = blob;
         bytesDownloaded += blob.size;
         if (onProgress) {
+          // For encrypted files, report plaintext bytes progress against expected plaintext size when provided.
           onProgress(bytesDownloaded, expectedSize);
         }
         notifyWriter();
@@ -568,6 +585,7 @@ class DiscordFileStorage {
     sourceFile: Blob,
     namePrefix: string | number | undefined,
     onProgress: ProgressCallback = null,
+    encryption?: { key: CryptoKey; meta: EncryptionMeta } | null,
   ): Promise<string[]> {
     if (onProgress) {
       onProgress(0, sourceFile.size);
@@ -588,12 +606,16 @@ class DiscordFileStorage {
         }
 
         try {
+          const plain = value as ArrayBuffer;
+          const data = encryption
+            ? await encryptChunk(encryption.key, encryption.meta, index, plain)
+            : plain;
           const result = await this.webhookClient.sendAttachment(
             `${namePrefix}_${index}`,
-            new Blob([value as ArrayBuffer]),
+            new Blob([data]),
           );
           messageIds[index] = result.id;
-          uploadedBytes += (value as ArrayBuffer).byteLength;
+          uploadedBytes += plain.byteLength;
           if (onProgress) {
             onProgress(uploadedBytes, sourceFile.size);
           }
@@ -620,15 +642,28 @@ class DiscordFileStorage {
     writeStream: WriteStreamLike,
     onProgress: ProgressCallback = null,
     fileSize = -1,
+    decryption?: { key: CryptoKey; meta: EncryptionMeta } | null,
   ): Promise<void> {
     let attachmentUrls = await this.getAttachmentUrls(messageIds);
     try {
-      await downloadFromAttachmentUrls(attachmentUrls, writeStream, onProgress, fileSize);
+      await downloadFromAttachmentUrls(
+        attachmentUrls,
+        writeStream,
+        onProgress,
+        fileSize,
+        decryption,
+      );
     } catch (error) {
       // Retry once with freshly fetched attachment URLs in case links expired.
       if (isExpiredOrMissingError(error)) {
         attachmentUrls = await this.getAttachmentUrls(messageIds);
-        await downloadFromAttachmentUrls(attachmentUrls, writeStream, onProgress, fileSize);
+        await downloadFromAttachmentUrls(
+          attachmentUrls,
+          writeStream,
+          onProgress,
+          fileSize,
+          decryption,
+        );
         return;
       }
       throw error;
@@ -638,7 +673,9 @@ class DiscordFileStorage {
   async downloadToExtension(
     messageIds: Array<string | number>,
     filename: string,
+    isEncrypted = false,
   ): Promise<boolean> {
+    if (isEncrypted) return false;
     let attachmentUrls = await this.getAttachmentUrls(messageIds);
     let ok = await downloadViaExtension(filename, attachmentUrls);
     if (ok) return true;
@@ -671,16 +708,11 @@ function countChildren(node: FileNode | null | undefined): number {
   return Object.keys(node.children).length;
 }
 
-function parseContentReferences(file: FileNode | null | undefined): string[] {
-  if (!file || !file.content) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(file.content);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+function parseContentReferences(file: FileNode | null | undefined): {
+  ids: string[];
+  enc?: EncryptionMeta;
+} {
+  return parseStoredFileContent(file?.content);
 }
 
 class DisboxFileManager {
@@ -914,7 +946,7 @@ class DisboxFileManager {
           path: nodePath,
           name: node.name,
           id: node.id,
-          contentReferences: parseContentReferences(node),
+          contentReferences: parseContentReferences(node).ids,
         });
       }
     };
@@ -1048,6 +1080,7 @@ class DisboxFileManager {
     path: string,
     fileBlob: Blob,
     onProgress?: ProgressCallback,
+    options?: { encrypt?: boolean; passphrase?: string },
   ): Promise<FileNode | null> {
     let file = this.getFile(path, false);
     if (!file) {
@@ -1058,16 +1091,25 @@ class DisboxFileManager {
       throw new Error(`Cannot upload content to a directory: ${path}`);
     }
 
-    const oldContentReferences = parseContentReferences(file);
+    const oldRefs = parseContentReferences(file);
+    let encryption: { key: CryptoKey; meta: EncryptionMeta } | null = null;
+    if (options?.encrypt) {
+      const passphrase = assertPassphrase(options.passphrase || '');
+      const ctx = await createEncryptionContext(passphrase);
+      ctx.meta.chunkSize = FILE_CHUNK_SIZE;
+      encryption = { key: ctx.key, meta: ctx.meta };
+    }
+
     const contentReferences = await this.discordFileStorage.upload(
       fileBlob,
       file.id as any,
       onProgress,
+      encryption,
     );
 
-    if (oldContentReferences.length > 0) {
+    if (oldRefs.ids.length > 0) {
       try {
-        await this.discordFileStorage.delete(oldContentReferences);
+        await this.discordFileStorage.delete(oldRefs.ids);
       } catch {
         // The old attachments are harmless orphans if this fails.
       }
@@ -1075,7 +1117,7 @@ class DisboxFileManager {
 
     await this.updateFile(path, {
       size: fileBlob.size,
-      content: JSON.stringify(contentReferences),
+      content: serializeStoredFileContent(contentReferences, encryption?.meta),
     });
 
     if (onProgress) {
@@ -1088,6 +1130,7 @@ class DisboxFileManager {
     path: string,
     writeStream: WriteStreamLike,
     onProgress?: ProgressCallback,
+    options?: { passphrase?: string },
   ): Promise<void> {
     const file = this.getFile(path);
     if (!file) {
@@ -1097,11 +1140,33 @@ class DisboxFileManager {
       throw new Error(`Cannot download content from directory: ${path}`);
     }
 
-    const messageIds = parseContentReferences(file);
+    const refs = parseContentReferences(file);
+    let decryption: { key: CryptoKey; meta: EncryptionMeta } | null = null;
+    if (refs.enc) {
+      const passphrase = assertPassphrase(options?.passphrase || '');
+      try {
+        const key = await keyFromMeta(passphrase, refs.enc);
+        decryption = { key, meta: refs.enc };
+      } catch {
+        throw new Error('Failed to initialize decryption. Check the encryption passphrase.');
+      }
+    }
+
     try {
-      await this.discordFileStorage.download(messageIds, writeStream, onProgress, file.size || -1);
+      await this.discordFileStorage.download(
+        refs.ids,
+        writeStream,
+        onProgress,
+        file.size || -1,
+        decryption,
+      );
     } catch (error) {
       const msg = getErrorMessage(error);
+      if (refs.enc && (msg.toLowerCase().includes('decrypt') || msg.includes('OperationError'))) {
+        throw new Error(
+          'Failed to decrypt file. The encryption passphrase may be incorrect or the file data is corrupted.',
+        );
+      }
       if (isExpiredOrMissingError(error)) {
         throw new Error(
           `Download failed because attachment links may have expired or are unavailable. ${msg}`,
@@ -1119,12 +1184,19 @@ class DisboxFileManager {
     if (file.type === 'directory') {
       throw new Error(`Cannot download content from directory: ${path}`);
     }
-    const messageIds = parseContentReferences(file);
+    const refs = parseContentReferences(file);
+    if (refs.enc) return false;
     try {
-      return await this.discordFileStorage.downloadToExtension(messageIds, file.name);
+      return await this.discordFileStorage.downloadToExtension(refs.ids, file.name, false);
     } catch {
       return false;
     }
+  }
+
+  isFileEncrypted(path: string): boolean {
+    const file = this.getFile(path);
+    if (!file || file.type === 'directory') return false;
+    return Boolean(parseContentReferences(file).enc);
   }
 
   async getAttachmentUrls(path: string): Promise<string[]> {
@@ -1136,7 +1208,14 @@ class DisboxFileManager {
       throw new Error(`Cannot share directory: ${path}`);
     }
 
-    return await this.discordFileStorage.getAttachmentUrls(parseContentReferences(file));
+    const refs = parseContentReferences(file);
+    return await this.discordFileStorage.getAttachmentUrls(refs.ids);
+  }
+
+  getFileEncryptionMeta(path: string): EncryptionMeta | null {
+    const file = this.getFile(path);
+    if (!file || file.type === 'directory') return null;
+    return parseContentReferences(file).enc || null;
   }
 }
 
