@@ -63,7 +63,7 @@ Suggestions and contributions are welcome!
   - Content-script bridge for reliable page↔extension messaging
   - Direct download support via browser Downloads API (preferred, avoids page CORS/data URL handoff to page)
   - Legacy fetch-to-data-URL fallback path retained for compatibility
-  - Updated manifest/permissions and versioning for AMO validation (prepared public/listed package `0.1.3` with ID `disbox-downloader-public@example.local`; a previous `0.1.2` build was AMO-approved)
+  - Updated manifest/permissions and versioning for AMO validation (prepared public/listed package with ID `disbox-downloader-public@example.local`; repo manifest now targets `0.1.4` with fork GitHub Pages origin support — submit/update on AMO for the deployed site)
 - **Testing/docs**
   - Added Vitest-based unit tests for utility/share logic and `docs/QA_CHECKLIST.md` for manual cross-browser QA
 
@@ -176,9 +176,9 @@ A Firefox extension implementation is available in `firefox-extension/` to assis
 - **Source/location:** `firefox-extension/` (manifest, background script, content-script bridge, icons)
 - **Extension ID:** `disbox-downloader-public@example.local` (as configured in this repo’s Firefox extension manifest/package for public listing)
 - **Capabilities:** direct download via browser Downloads API (preferred), capability detection/ping, and legacy fetch fallback path
-- **Allowed origins (content-script bridge):** `http://localhost/*`, `http://127.0.0.1/*`, `https://localhost/*`, `https://127.0.0.1/*`, `https://disboxapp.github.io/*`
+- **Allowed origins (content-script bridge):** `https://fl-of.github.io/*`, `https://disboxapp.github.io/*`, `http://localhost/*`, `http://127.0.0.1/*`, `https://localhost/*`, `https://127.0.0.1/*`
 - **Temporary/local load:** `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on...** → `firefox-extension/manifest.json`
-- **Current packaged manifest version in repo:** `0.1.3` (prepared with a unique ID for a separate public/listed AMO submission)
+- **Current packaged manifest version in repo:** `0.1.4` (includes fork GitHub Pages origin support for the content-script bridge; submit/update on AMO for website use)
 
 ### Using the Firefox extension with this web app
 
