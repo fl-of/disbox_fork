@@ -42,8 +42,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run lint && npm run format && npm run test",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "predeploy": "npm run build && rm -rf .gh-pages-deploy && mkdir -p .gh-pages-deploy/web && cp -r dist/* .gh-pages-deploy/web/",
+    "deploy": "gh-pages -d .gh-pages-deploy"
   },
   "browserslist": {
     "production": [

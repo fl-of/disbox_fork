@@ -28,3 +28,4 @@ yarn-error.log*
 /dist
 disbox-downloader-firefox.zip
 build.log
+/.gh-pages-deploy
