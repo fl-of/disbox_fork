@@ -63,15 +63,27 @@ export default function TransferManager({
                 alignItems="flex-start"
                 secondaryAction={
                   t.type === 'upload' && t.status === 'running' ? (
-                    <IconButton edge="end" aria-label={`Pause ${t.name}`} onClick={() => onPause?.(t.id)}>
+                    <IconButton
+                      edge="end"
+                      aria-label={`Pause ${t.name}`}
+                      onClick={() => onPause?.(t.id)}
+                    >
                       <FiPause />
                     </IconButton>
                   ) : t.status === 'paused' ? (
-                    <IconButton edge="end" aria-label={`Resume ${t.name}`} onClick={() => onResume?.(t.id)}>
+                    <IconButton
+                      edge="end"
+                      aria-label={`Resume ${t.name}`}
+                      onClick={() => onResume?.(t.id)}
+                    >
                       <FiPlay />
                     </IconButton>
                   ) : t.status === 'failed' ? (
-                    <IconButton edge="end" aria-label={`Retry ${t.name}`} onClick={() => onRetry(t.id)}>
+                    <IconButton
+                      edge="end"
+                      aria-label={`Retry ${t.name}`}
+                      onClick={() => onRetry(t.id)}
+                    >
                       <FiRefreshCw />
                     </IconButton>
                   ) : null

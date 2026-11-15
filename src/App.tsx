@@ -143,7 +143,9 @@ function App() {
   const transferRunRef = useRef<Promise<void>>(Promise.resolve());
   const pauseRequestedRef = useRef<Record<string, boolean>>({});
   const transferStateRef = useRef<TransferItem[]>([]);
-  useEffect(() => { transferStateRef.current = transfers; }, [transfers]);
+  useEffect(() => {
+    transferStateRef.current = transfers;
+  }, [transfers]);
   const isMobile = useMediaQuery('(max-width:900px)');
   const previewUrlRef = useRef<string>('');
   const [extensionStatus, setExtensionStatus] = useState<{
@@ -275,10 +277,19 @@ function App() {
               return prev;
             }
             void (async () => {
-              updateTransfer(id, { status: 'running', progress: t.progress >= 0 ? t.progress : 0, error: '' });
+              updateTransfer(id, {
+                status: 'running',
+                progress: t.progress >= 0 ? t.progress : 0,
+                error: '',
+              });
               try {
                 if (t.type === 'upload') {
-                  const payload = t.payload as { file: File; targetPath: string; resume?: any; encrypted?: boolean };
+                  const payload = t.payload as {
+                    file: File;
+                    targetPath: string;
+                    resume?: any;
+                    encrypted?: boolean;
+                  };
                   const { file, targetPath } = payload;
                   pauseRequestedRef.current[id] = false;
                   const result = await fileManager.uploadFile(
@@ -300,15 +311,25 @@ function App() {
                     },
                   );
                   if ((result as any).status === 'paused') {
-                    setTransfers((prev2) => prev2.map((x) => x.id === id ? {
-                      ...x,
-                      status: 'paused',
-                      error: '',
-                      payload: { ...x.payload, resume: (result as any).resume },
-                    } : x));
+                    setTransfers((prev2) =>
+                      prev2.map((x) =>
+                        x.id === id
+                          ? {
+                              ...x,
+                              status: 'paused',
+                              error: '',
+                              payload: { ...x.payload, resume: (result as any).resume },
+                            }
+                          : x,
+                      ),
+                    );
                   } else {
                     updateTransfer(id, { status: 'completed', progress: 100 });
-                    setTransfers((prev2) => prev2.map((x) => x.id === id ? { ...x, payload: { ...x.payload, resume: null } } : x));
+                    setTransfers((prev2) =>
+                      prev2.map((x) =>
+                        x.id === id ? { ...x, payload: { ...x.payload, resume: null } } : x,
+                      ),
+                    );
                     const dir = targetPath.split(FILE_DELIMITER).slice(0, -1).join(FILE_DELIMITER);
                     if (normalizePath(dir) === normalizePath(path)) {
                       refreshCurrentView(fileManager, path);
@@ -365,7 +386,9 @@ function App() {
               }
             })();
             return prev.map((x) =>
-              x.id === id ? { ...x, status: 'running', progress: x.progress >= 0 ? x.progress : 0, error: '' } : x,
+              x.id === id
+                ? { ...x, status: 'running', progress: x.progress >= 0 ? x.progress : 0, error: '' }
+                : x,
             );
           });
         });
@@ -408,7 +431,12 @@ function App() {
             type: 'upload',
             name: fileName,
             targetPath,
-            payload: { file, targetPath, resume: null, encrypted: Boolean(encryptUploads && encryptionPassphrase) },
+            payload: {
+              file,
+              targetPath,
+              resume: null,
+              encrypted: Boolean(encryptUploads && encryptionPassphrase),
+            },
           });
         } catch (e: any) {
           notify(`Could not queue ${originalName}: ${e?.message || e}`, 'error');
@@ -422,7 +450,16 @@ function App() {
       }
       refreshCurrentView(fileManager, path);
     },
-    [encryptUploads, encryptionPassphrase, enqueueTransfers, fileManager, notify, path, refreshCurrentView, runTransfer],
+    [
+      encryptUploads,
+      encryptionPassphrase,
+      enqueueTransfers,
+      fileManager,
+      notify,
+      path,
+      refreshCurrentView,
+      runTransfer,
+    ],
   );
 
   useEffect(() => {
@@ -1125,19 +1162,27 @@ function App() {
     showDirectory,
   ]);
 
-  const pauseTransfer = useCallback(async (id: string) => {
-    const t = transferStateRef.current.find((x) => x.id === id);
-    if (!t || t.type !== 'upload' || t.status !== 'running') return;
-    pauseRequestedRef.current[id] = true;
-    updateTransfer(id, { error: 'Pausing...' });
-  }, [updateTransfer]);
+  const pauseTransfer = useCallback(
+    async (id: string) => {
+      const t = transferStateRef.current.find((x) => x.id === id);
+      if (!t || t.type !== 'upload' || t.status !== 'running') return;
+      pauseRequestedRef.current[id] = true;
+      updateTransfer(id, { error: 'Pausing...' });
+    },
+    [updateTransfer],
+  );
 
-  const resumeTransfer = useCallback(async (id: string) => {
-    const t = transferStateRef.current.find((x) => x.id === id);
-    if (!t || t.type !== 'upload' || t.status !== 'paused') return;
-    setTransfers((prev) => prev.map((x) => (x.id === id ? { ...x, status: 'queued', error: '' } : x)));
-    await runTransfer(id);
-  }, [runTransfer]);
+  const resumeTransfer = useCallback(
+    async (id: string) => {
+      const t = transferStateRef.current.find((x) => x.id === id);
+      if (!t || t.type !== 'upload' || t.status !== 'paused') return;
+      setTransfers((prev) =>
+        prev.map((x) => (x.id === id ? { ...x, status: 'queued', error: '' } : x)),
+      );
+      await runTransfer(id);
+    },
+    [runTransfer],
+  );
 
   const retryTransfer = useCallback(
     async (id: string) => {

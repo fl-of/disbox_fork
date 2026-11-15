@@ -583,7 +583,10 @@ class DiscordFileStorage {
     },
   ): Promise<{ messageIds: string[]; paused: boolean; uploadedBytes: number }> {
     const totalChunks = Math.max(1, Math.ceil(sourceFile.size / FILE_CHUNK_SIZE));
-    const messageIds: Array<string | undefined> = Array.from({ length: totalChunks }, (_, i) => options?.resume?.messageIds?.[i]);
+    const messageIds: Array<string | undefined> = Array.from(
+      { length: totalChunks },
+      (_, i) => options?.resume?.messageIds?.[i],
+    );
     let uploadedBytes = options?.resume?.uploadedBytes ?? 0;
     if (uploadedBytes === 0) {
       for (let i = 0; i < totalChunks; i++) {
@@ -1102,10 +1105,20 @@ class DisboxFileManager {
     options?: {
       encrypt?: boolean;
       passphrase?: string;
-      resume?: { messageIds?: Array<string | undefined>; uploadedBytes?: number; enc?: EncryptionMeta };
+      resume?: {
+        messageIds?: Array<string | undefined>;
+        uploadedBytes?: number;
+        enc?: EncryptionMeta;
+      };
       shouldPause?: () => boolean;
     },
-  ): Promise<{ status: 'completed'; file: FileNode | null } | { status: 'paused'; resume: { messageIds: string[]; uploadedBytes: number; enc?: EncryptionMeta } }> {
+  ): Promise<
+    | { status: 'completed'; file: FileNode | null }
+    | {
+        status: 'paused';
+        resume: { messageIds: string[]; uploadedBytes: number; enc?: EncryptionMeta };
+      }
+  > {
     let file = this.getFile(path, false);
     if (!file) {
       await this.createFile(path);
@@ -1120,7 +1133,10 @@ class DisboxFileManager {
     if (options?.encrypt) {
       const passphrase = assertPassphrase(options.passphrase || '');
       if (options.resume?.enc) {
-        encryption = { key: await keyFromMeta(passphrase, options.resume.enc), meta: options.resume.enc };
+        encryption = {
+          key: await keyFromMeta(passphrase, options.resume.enc),
+          meta: options.resume.enc,
+        };
       } else {
         const ctx = await createEncryptionContext(passphrase);
         ctx.meta.chunkSize = FILE_CHUNK_SIZE;
@@ -1129,7 +1145,10 @@ class DisboxFileManager {
     } else if (options?.resume?.enc) {
       // Resume must keep same encryption metadata/key if upload was encrypted.
       const passphrase = assertPassphrase(options.passphrase || '');
-      encryption = { key: await keyFromMeta(passphrase, options.resume.enc), meta: options.resume.enc };
+      encryption = {
+        key: await keyFromMeta(passphrase, options.resume.enc),
+        meta: options.resume.enc,
+      };
     }
 
     const result = await this.discordFileStorage.upload(
