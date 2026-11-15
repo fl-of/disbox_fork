@@ -2,8 +2,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ command }) => ({
-  // Use /web/ for GitHub Pages builds; / for local dev server convenience.
-  base: command === 'build' ? '/web/' : '/',
+  // Use /disbox_fork/web/ for this fork's GitHub Pages project site; / for local dev server convenience.
+  base: command === 'build' ? '/disbox_fork/web/' : '/',
   plugins: [react()],
   build: {
     outDir: 'dist',
