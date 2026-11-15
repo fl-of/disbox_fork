@@ -42,7 +42,7 @@ Suggestions and contributions are welcome!
   - Added route-level lazy loading and Vite manual chunking; replaced `react-helmet` with `react-helmet-async`
   - Added quality/tooling scripts and CI workflow: `typecheck`, `lint`, `format`, `test`, GitHub Actions CI
 - **File manager / UX**
-  - Transfer manager (queued/running/completed/failed, progress, retry, clear completed)
+  - Transfer manager (queued/running/paused/completed/failed, progress, retry, pause/resume uploads, clear completed)
   - Bulk actions, per-item "More" actions menu, improved loading/error/empty states
   - Upload improvements: multi-file upload, folder upload picker, drag-and-drop files/folders with preserved structure
   - Move/rename dialogs, move conflict handling (rename/skip), safer delete confirmation dialog
@@ -211,6 +211,7 @@ The web app supports optional client-side encryption for **new uploads**:
 
 ## Notes
 
+- **Pause/resume uploads:** supported in-session from the transfer manager. If the app/tab is closed or reloaded while an upload is paused, partial uploaded chunks may remain unreferenced on Discord and the upload cannot yet be resumed automatically.
 - Discord attachment URLs can expire; if a shared/download link stops working, regenerate the share link or retry the download (the app attempts expired-link recovery in supported flows).
 - Public CORS proxies may fail or be blocked; a browser extension or a trusted/self-hosted proxy is more reliable for downloads.
 - Deletions are permanent after confirmation (no trash/restore).

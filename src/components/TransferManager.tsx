@@ -11,7 +11,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { FiRefreshCw, FiX } from 'react-icons/fi';
+import { FiPause, FiPlay, FiRefreshCw, FiX } from 'react-icons/fi';
 import type { TransferItem } from '../types/app';
 
 interface Props {
@@ -19,6 +19,8 @@ interface Props {
   onClose: () => void;
   transfers: TransferItem[];
   onRetry: (id: string) => void | Promise<void>;
+  onPause?: (id: string) => void | Promise<void>;
+  onResume?: (id: string) => void | Promise<void>;
   onClearCompleted: () => void;
 }
 
@@ -27,6 +29,8 @@ export default function TransferManager({
   onClose,
   transfers,
   onRetry,
+  onPause,
+  onResume,
   onClearCompleted,
 }: Props) {
   return (
@@ -58,12 +62,16 @@ export default function TransferManager({
                 divider
                 alignItems="flex-start"
                 secondaryAction={
-                  t.status === 'failed' ? (
-                    <IconButton
-                      edge="end"
-                      aria-label={`Retry ${t.name}`}
-                      onClick={() => onRetry(t.id)}
-                    >
+                  t.type === 'upload' && t.status === 'running' ? (
+                    <IconButton edge="end" aria-label={`Pause ${t.name}`} onClick={() => onPause?.(t.id)}>
+                      <FiPause />
+                    </IconButton>
+                  ) : t.status === 'paused' ? (
+                    <IconButton edge="end" aria-label={`Resume ${t.name}`} onClick={() => onResume?.(t.id)}>
+                      <FiPlay />
+                    </IconButton>
+                  ) : t.status === 'failed' ? (
+                    <IconButton edge="end" aria-label={`Retry ${t.name}`} onClick={() => onRetry(t.id)}>
                       <FiRefreshCw />
                     </IconButton>
                   ) : null
@@ -85,7 +93,9 @@ export default function TransferManager({
                               ? 'error'
                               : t.status === 'running'
                                 ? 'primary'
-                                : 'default'
+                                : t.status === 'paused'
+                                  ? 'warning'
+                                  : 'default'
                         }
                         label={t.status}
                       />

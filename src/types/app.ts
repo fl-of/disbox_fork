@@ -2,12 +2,19 @@ import type { FileNode } from '../disbox-file-manager';
 
 export type Severity = 'success' | 'info' | 'warning' | 'error';
 
+export interface UploadResumeState {
+  messageIds: string[];
+  uploadedBytes: number;
+  totalBytes: number;
+  encrypted: boolean;
+}
+
 export interface TransferItem {
   id: string;
   type: 'upload' | 'download';
   name: string;
   targetPath: string;
-  status: 'queued' | 'running' | 'completed' | 'failed';
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'paused';
   progress: number;
   error: string;
   payload: any;

@@ -92,16 +92,7 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-async function* readFile(file: Blob, chunkSize: number): AsyncGenerator<ArrayBuffer> {
-  const fileSize = file.size;
-  let offset = 0;
-
-  while (offset < fileSize) {
-    const blob = file.slice(offset, offset + chunkSize);
-    yield await blob.arrayBuffer();
-    offset += chunkSize;
-  }
-}
+// (readFile generator removed; uploads slice chunks by index to support pause/resume)
 
 function getExtensionRuntime(): any | null {
   const c: any = (globalThis as any).chrome;
@@ -586,27 +577,54 @@ class DiscordFileStorage {
     namePrefix: string | number | undefined,
     onProgress: ProgressCallback = null,
     encryption?: { key: CryptoKey; meta: EncryptionMeta } | null,
-  ): Promise<string[]> {
-    if (onProgress) {
-      onProgress(0, sourceFile.size);
+    options?: {
+      resume?: { messageIds?: Array<string | undefined>; uploadedBytes?: number };
+      shouldPause?: () => boolean;
+    },
+  ): Promise<{ messageIds: string[]; paused: boolean; uploadedBytes: number }> {
+    const totalChunks = Math.max(1, Math.ceil(sourceFile.size / FILE_CHUNK_SIZE));
+    const messageIds: Array<string | undefined> = Array.from({ length: totalChunks }, (_, i) => options?.resume?.messageIds?.[i]);
+    let uploadedBytes = options?.resume?.uploadedBytes ?? 0;
+    if (uploadedBytes === 0) {
+      for (let i = 0; i < totalChunks; i++) {
+        if (messageIds[i]) {
+          const start = i * FILE_CHUNK_SIZE;
+          const end = Math.min(sourceFile.size, start + FILE_CHUNK_SIZE);
+          uploadedBytes += Math.max(0, end - start);
+        }
+      }
     }
 
-    const messageIds: string[] = [];
-    const iterator = readFile(sourceFile, FILE_CHUNK_SIZE)[Symbol.asyncIterator]();
+    if (onProgress) {
+      onProgress(uploadedBytes, sourceFile.size);
+    }
+
     let nextIndex = 0;
-    let uploadedBytes = 0;
     let failure: unknown = null;
+    let paused = false;
 
     const worker = async () => {
       while (!failure) {
+        if (options?.shouldPause?.()) {
+          paused = true;
+          return;
+        }
         const index = nextIndex++;
-        const { value, done } = await iterator.next();
-        if (done || failure) {
+        if (index >= totalChunks) {
+          return;
+        }
+        if (messageIds[index]) {
+          continue;
+        }
+        if (options?.shouldPause?.()) {
+          paused = true;
           return;
         }
 
         try {
-          const plain = value as ArrayBuffer;
+          const start = index * FILE_CHUNK_SIZE;
+          const end = Math.min(sourceFile.size, start + FILE_CHUNK_SIZE);
+          const plain = await sourceFile.slice(start, end).arrayBuffer();
           const data = encryption
             ? await encryptChunk(encryption.key, encryption.meta, index, plain)
             : plain;
@@ -631,10 +649,11 @@ class DiscordFileStorage {
       throw failure;
     }
 
-    if (onProgress) {
+    const allDone = messageIds.every(Boolean);
+    if (allDone && onProgress) {
       onProgress(sourceFile.size, sourceFile.size);
     }
-    return messageIds;
+    return { messageIds: messageIds as string[], paused: !allDone && paused, uploadedBytes };
   }
 
   async download(
@@ -1080,8 +1099,13 @@ class DisboxFileManager {
     path: string,
     fileBlob: Blob,
     onProgress?: ProgressCallback,
-    options?: { encrypt?: boolean; passphrase?: string },
-  ): Promise<FileNode | null> {
+    options?: {
+      encrypt?: boolean;
+      passphrase?: string;
+      resume?: { messageIds?: Array<string | undefined>; uploadedBytes?: number; enc?: EncryptionMeta };
+      shouldPause?: () => boolean;
+    },
+  ): Promise<{ status: 'completed'; file: FileNode | null } | { status: 'paused'; resume: { messageIds: string[]; uploadedBytes: number; enc?: EncryptionMeta } }> {
     let file = this.getFile(path, false);
     if (!file) {
       await this.createFile(path);
@@ -1095,17 +1119,37 @@ class DisboxFileManager {
     let encryption: { key: CryptoKey; meta: EncryptionMeta } | null = null;
     if (options?.encrypt) {
       const passphrase = assertPassphrase(options.passphrase || '');
-      const ctx = await createEncryptionContext(passphrase);
-      ctx.meta.chunkSize = FILE_CHUNK_SIZE;
-      encryption = { key: ctx.key, meta: ctx.meta };
+      if (options.resume?.enc) {
+        encryption = { key: await keyFromMeta(passphrase, options.resume.enc), meta: options.resume.enc };
+      } else {
+        const ctx = await createEncryptionContext(passphrase);
+        ctx.meta.chunkSize = FILE_CHUNK_SIZE;
+        encryption = { key: ctx.key, meta: ctx.meta };
+      }
+    } else if (options?.resume?.enc) {
+      // Resume must keep same encryption metadata/key if upload was encrypted.
+      const passphrase = assertPassphrase(options.passphrase || '');
+      encryption = { key: await keyFromMeta(passphrase, options.resume.enc), meta: options.resume.enc };
     }
 
-    const contentReferences = await this.discordFileStorage.upload(
+    const result = await this.discordFileStorage.upload(
       fileBlob,
       file.id as any,
       onProgress,
       encryption,
+      { resume: options?.resume, shouldPause: options?.shouldPause },
     );
+
+    if (result.paused) {
+      return {
+        status: 'paused',
+        resume: {
+          messageIds: result.messageIds,
+          uploadedBytes: result.uploadedBytes,
+          enc: encryption?.meta,
+        },
+      };
+    }
 
     if (oldRefs.ids.length > 0) {
       try {
@@ -1117,13 +1161,13 @@ class DisboxFileManager {
 
     await this.updateFile(path, {
       size: fileBlob.size,
-      content: serializeStoredFileContent(contentReferences, encryption?.meta),
+      content: serializeStoredFileContent(result.messageIds, encryption?.meta),
     });
 
     if (onProgress) {
       onProgress(fileBlob.size, fileBlob.size);
     }
-    return this.getFile(path);
+    return { status: 'completed', file: this.getFile(path) };
   }
 
   async downloadFile(

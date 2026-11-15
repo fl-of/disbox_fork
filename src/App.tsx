@@ -141,6 +141,9 @@ function App() {
   const [transfersOpen, setTransfersOpen] = useState<boolean>(false);
   const [busy, setBusy] = useState<boolean>(false);
   const transferRunRef = useRef<Promise<void>>(Promise.resolve());
+  const pauseRequestedRef = useRef<Record<string, boolean>>({});
+  const transferStateRef = useRef<TransferItem[]>([]);
+  useEffect(() => { transferStateRef.current = transfers; }, [transfers]);
   const isMobile = useMediaQuery('(max-width:900px)');
   const previewUrlRef = useRef<string>('');
   const [extensionStatus, setExtensionStatus] = useState<{
@@ -272,11 +275,13 @@ function App() {
               return prev;
             }
             void (async () => {
-              updateTransfer(id, { status: 'running', progress: 0, error: '' });
+              updateTransfer(id, { status: 'running', progress: t.progress >= 0 ? t.progress : 0, error: '' });
               try {
                 if (t.type === 'upload') {
-                  const { file, targetPath } = t.payload as { file: File; targetPath: string };
-                  await fileManager.uploadFile(
+                  const payload = t.payload as { file: File; targetPath: string; resume?: any; encrypted?: boolean };
+                  const { file, targetPath } = payload;
+                  pauseRequestedRef.current[id] = false;
+                  const result = await fileManager.uploadFile(
                     targetPath,
                     file,
                     (value: number, total: number) => {
@@ -284,14 +289,30 @@ function App() {
                         progress: total > 0 ? Math.round((value / total) * 100) : 0,
                       });
                     },
-                    encryptUploads && encryptionPassphrase
-                      ? { encrypt: true, passphrase: encryptionPassphrase }
-                      : undefined,
+                    {
+                      ...(payload.encrypted && encryptionPassphrase
+                        ? { encrypt: true, passphrase: encryptionPassphrase }
+                        : payload.resume?.enc && encryptionPassphrase
+                          ? { passphrase: encryptionPassphrase }
+                          : {}),
+                      resume: payload.resume || undefined,
+                      shouldPause: () => Boolean(pauseRequestedRef.current[id]),
+                    },
                   );
-                  updateTransfer(id, { status: 'completed', progress: 100 });
-                  const dir = targetPath.split(FILE_DELIMITER).slice(0, -1).join(FILE_DELIMITER);
-                  if (normalizePath(dir) === normalizePath(path)) {
-                    refreshCurrentView(fileManager, path);
+                  if ((result as any).status === 'paused') {
+                    setTransfers((prev2) => prev2.map((x) => x.id === id ? {
+                      ...x,
+                      status: 'paused',
+                      error: '',
+                      payload: { ...x.payload, resume: (result as any).resume },
+                    } : x));
+                  } else {
+                    updateTransfer(id, { status: 'completed', progress: 100 });
+                    setTransfers((prev2) => prev2.map((x) => x.id === id ? { ...x, payload: { ...x.payload, resume: null } } : x));
+                    const dir = targetPath.split(FILE_DELIMITER).slice(0, -1).join(FILE_DELIMITER);
+                    if (normalizePath(dir) === normalizePath(path)) {
+                      refreshCurrentView(fileManager, path);
+                    }
                   }
                 } else if (t.type === 'download') {
                   const { row } = t.payload as { row: FileNode };
@@ -339,11 +360,12 @@ function App() {
                   'error',
                 );
               } finally {
+                delete pauseRequestedRef.current[id];
                 resolveTask();
               }
             })();
             return prev.map((x) =>
-              x.id === id ? { ...x, status: 'running', progress: 0, error: '' } : x,
+              x.id === id ? { ...x, status: 'running', progress: x.progress >= 0 ? x.progress : 0, error: '' } : x,
             );
           });
         });
@@ -351,7 +373,6 @@ function App() {
       await transferRunRef.current.catch(() => {});
     },
     [
-      encryptUploads,
       encryptionPassphrase,
       extensionStatus.canDirectDownload,
       fileManager,
@@ -387,7 +408,7 @@ function App() {
             type: 'upload',
             name: fileName,
             targetPath,
-            payload: { file, targetPath },
+            payload: { file, targetPath, resume: null, encrypted: Boolean(encryptUploads && encryptionPassphrase) },
           });
         } catch (e: any) {
           notify(`Could not queue ${originalName}: ${e?.message || e}`, 'error');
@@ -401,7 +422,7 @@ function App() {
       }
       refreshCurrentView(fileManager, path);
     },
-    [enqueueTransfers, fileManager, notify, path, refreshCurrentView, runTransfer],
+    [encryptUploads, encryptionPassphrase, enqueueTransfers, fileManager, notify, path, refreshCurrentView, runTransfer],
   );
 
   useEffect(() => {
@@ -1103,6 +1124,20 @@ function App() {
     openRenameDialog,
     showDirectory,
   ]);
+
+  const pauseTransfer = useCallback(async (id: string) => {
+    const t = transferStateRef.current.find((x) => x.id === id);
+    if (!t || t.type !== 'upload' || t.status !== 'running') return;
+    pauseRequestedRef.current[id] = true;
+    updateTransfer(id, { error: 'Pausing...' });
+  }, [updateTransfer]);
+
+  const resumeTransfer = useCallback(async (id: string) => {
+    const t = transferStateRef.current.find((x) => x.id === id);
+    if (!t || t.type !== 'upload' || t.status !== 'paused') return;
+    setTransfers((prev) => prev.map((x) => (x.id === id ? { ...x, status: 'queued', error: '' } : x)));
+    await runTransfer(id);
+  }, [runTransfer]);
 
   const retryTransfer = useCallback(
     async (id: string) => {
@@ -1823,10 +1858,16 @@ function App() {
           onClose={() => setTransfersOpen(false)}
           transfers={transfers}
           onRetry={(id) => void retryTransfer(id)}
+          onPause={(id) => void pauseTransfer(id)}
+          onResume={(id) => void resumeTransfer(id)}
           onClearCompleted={() =>
             setTransfers((prev) =>
               prev.filter(
-                (t) => t.status === 'running' || t.status === 'queued' || t.status === 'failed',
+                (t) =>
+                  t.status === 'running' ||
+                  t.status === 'queued' ||
+                  t.status === 'failed' ||
+                  t.status === 'paused',
               ),
             )
           }
