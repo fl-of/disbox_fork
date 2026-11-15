@@ -88,7 +88,11 @@ function Home() {
               style={{ fontSize: '1.6rem', padding: '0.6rem 1.4rem' }}
               variant="outline-light"
               onClick={() =>
-                window.open('https://github.com/DisboxApp/web', '_blank', 'noopener,noreferrer')
+                window.open(
+                  'https://github.com/fl-of/disbox_fork/',
+                  '_blank',
+                  'noopener,noreferrer',
+                )
               }
             >
               <b>Source code</b>

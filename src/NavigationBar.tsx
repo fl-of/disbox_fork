@@ -20,14 +20,14 @@ function NavigationBar() {
           </Nav>
           <Nav className="ms-auto">
             <Nav.Link
-              href="https://github.com/DisboxApp/web"
+              href="https://github.com/fl-of/disbox_fork/"
               target="_blank"
               rel="noopener noreferrer"
             >
               Source code
             </Nav.Link>
             <Nav.Link
-              href="https://github.com/DisboxApp/web/issues"
+              href="https://github.com/fl-of/disbox_fork/issues"
               target="_blank"
               rel="noopener noreferrer"
             >
