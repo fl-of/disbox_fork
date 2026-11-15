@@ -205,9 +205,10 @@ The web app supports optional client-side encryption for **new uploads**:
 - Encrypted files are **auto-decrypted in-app** for downloads/previews/folder zip when the correct passphrase is configured.
 - Encryption metadata is stored with the file’s content reference (legacy unencrypted files remain compatible).
 
-**Important limitations**
+**Important limitations / security notes**
 
-- The passphrase is stored in this browser’s `localStorage` for convenience. Treat the device/browser profile as trusted.
+- **Passphrase storage:** for convenience (auto-decrypt), the passphrase is currently stored in **plaintext in this browser’s `localStorage`**. It is not sent to Disbox/Discord servers and the derived AES-GCM key is kept non-extractable in memory, but the stored passphrase can be exposed to same-origin script access (e.g. XSS), malicious browser extensions, or a compromised browser profile/device.
+- **Key/nonce handling:** uploads use per-file random salt + base IV with per-chunk IV derivation for AES-GCM; avoid reusing encryption metadata in ways that could reuse a (key, IV) pair.
 - If you lose the passphrase, **encrypted files cannot be recovered**.
 - Share links do not include the encryption passphrase (or a recipient-decryptable key), so recipients cannot auto-decrypt encrypted files from a share link alone.
 - Encrypted files use the in-app download/decrypt path (extension direct-download is bypassed for encrypted content).
