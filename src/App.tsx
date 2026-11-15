@@ -24,6 +24,8 @@ import {
 } from '@mui/material';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import JSZip from 'jszip';
+import { Zip, ZipPassThrough } from 'fflate';
+import { showSaveFilePicker } from 'native-file-system-adapter';
 import {
   FiX,
   FiTrash2,
@@ -628,17 +630,144 @@ function App() {
         notify(`Folder "${folder.name}" is empty.`, 'warning');
         return;
       }
+
+      const saveZipStream = async (suggestedName: string) => {
+        try {
+          const handle: any = await showSaveFilePicker({
+            suggestedName,
+            types: [{ description: 'ZIP archive', accept: { 'application/zip': ['.zip'] } }],
+          });
+          const writable: any = await handle.createWritable();
+          const writer = writable?.getWriter ? writable.getWriter() : writable;
+          return {
+            write: async (data: Uint8Array) => {
+              await writer.write(data);
+            },
+            close: async () => {
+              if (writer?.close) await writer.close();
+              else if (writable?.close) await writable.close();
+            },
+            abort: async () => {
+              try {
+                if (writer?.abort) await writer.abort();
+                else if (writable?.abort) await writable.abort();
+              } catch {
+                // ignore
+              }
+            },
+          };
+        } catch {
+          return null;
+        }
+      };
+
       setBusy(true);
       notify(`Preparing zip for "${folder.name}" (${files.length} files)...`, 'info');
+      const base = String(folder.path || '').replace(/^\/+|\/+$/g, '');
+      const zipName = `${folder.name || 'folder'}.zip`;
+      const out = await saveZipStream(zipName);
+
       try {
+        // Streaming path (preferred): stream zip bytes to disk as files download.
+        if (out) {
+          try {
+            let writeChain = Promise.resolve();
+            let writeError: unknown = null;
+            let finalized = false;
+            let finalizeResolve: (() => void) | null = null;
+            let finalizeReject: ((e: unknown) => void) | null = null;
+            const finalizePromise = new Promise<void>((resolve, reject) => {
+              finalizeResolve = resolve;
+              finalizeReject = reject;
+            });
+
+            const zip = new Zip((err, data, final) => {
+              if (err) {
+                writeError = writeError || err;
+                if (!finalized) finalizeReject?.(err);
+                return;
+              }
+              writeChain = writeChain
+                .then(async () => {
+                  await out.write(data);
+                  if (final && !finalized) {
+                    finalized = true;
+                    finalizeResolve?.();
+                  }
+                })
+                .catch((e) => {
+                  writeError = writeError || e;
+                  if (!finalized) finalizeReject?.(e);
+                  throw e;
+                });
+            });
+
+            for (let i = 0; i < files.length; i++) {
+              if (writeError) throw writeError;
+              const file = files[i];
+              const rel =
+                String(file.path || '')
+                  .replace(/^\/+/, '')
+                  .slice(base.length)
+                  .replace(/^\/+/, '') || file.name;
+              const entry = new ZipPassThrough(rel);
+              zip.add(entry);
+
+              const writable = {
+                write: async (data: Blob | BufferSource | string) => {
+                  let u8: Uint8Array;
+                  if (data instanceof Uint8Array) u8 = data;
+                  else if (data instanceof Blob) u8 = new Uint8Array(await data.arrayBuffer());
+                  else if (typeof data === 'string') u8 = new TextEncoder().encode(data);
+                  else if (data instanceof ArrayBuffer) u8 = new Uint8Array(data);
+                  else {
+                    const view = data as ArrayBufferView;
+                    u8 = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+                  }
+                  entry.push(u8);
+                },
+                close: async () => {
+                  entry.push(new Uint8Array(0), true);
+                },
+              };
+
+              // eslint-disable-next-line no-await-in-loop
+              await fileManager.downloadFile(
+                file.path as string,
+                writable,
+                null,
+                encryptionPassphrase ? { passphrase: encryptionPassphrase } : undefined,
+              );
+
+              if ((i + 1) % 3 === 0 || i === files.length - 1) {
+                notify(`Streaming zip "${folder.name}": ${i + 1}/${files.length} files`, 'info');
+              }
+            }
+
+            zip.end();
+            await finalizePromise;
+            await writeChain;
+            await out.close();
+            notify(`Downloaded "${folder.name}.zip" (streamed).`, 'success');
+            return;
+          } catch (e: any) {
+            try {
+              await out.abort();
+            } catch {}
+            notify(`Failed to stream zip, falling back: ${e?.message || e}`, 'warning');
+            // fall through to in-memory fallback
+          }
+        }
+
+        // Fallback (non-streaming destination): build zip in memory (higher RAM usage).
         const zip = new JSZip();
-        const base = String(folder.path || '').replace(/^\/+|\/+$/g, '');
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
-          const rel = String(file.path || '')
-            .replace(/^\/+/, '')
-            .slice(base.length)
-            .replace(/^\/+/, '');
+          const rel =
+            String(file.path || '')
+              .replace(/^\/+/, '')
+              .slice(base.length)
+              .replace(/^\/+/, '') || file.name;
           const chunks: Blob[] = [];
           const writable = {
             write: async (blob: Blob) => {
@@ -653,7 +782,7 @@ function App() {
             null,
             encryptionPassphrase ? { passphrase: encryptionPassphrase } : undefined,
           );
-          zip.file(rel || file.name, new Blob(chunks));
+          zip.file(rel, new Blob(chunks));
           if ((i + 1) % 3 === 0 || i === files.length - 1) {
             notify(`Zipping "${folder.name}": ${i + 1}/${files.length} files`, 'info');
           }
@@ -662,7 +791,7 @@ function App() {
         const a = document.createElement('a');
         const url = URL.createObjectURL(blob);
         a.href = url;
-        a.download = `${folder.name || 'folder'}.zip`;
+        a.download = zipName;
         document.body.appendChild(a);
         a.click();
         a.remove();

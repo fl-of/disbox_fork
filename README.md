@@ -8,28 +8,28 @@ Using Discord webhooks allows for simple setup, chunked uploads/downloads, multi
 
 ## Features
 
-| Feature                           | Support              | UI                                                                                                | JavaScript/API notes                                                                  |
-| --------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Login using Webhook URL           | ✅                   | Setup page (validates/connects storage)                                                           | `DisboxFileManager.create(webhookUrl)`                                                |
-| Upload files                      | ✅                   | Upload files button, multi-file picker, drag & drop, transfer queue                               | `uploadFile(path, file, onProgress)`                                                  |
-| Upload folders                    | ✅                   | Upload folder picker and drag & drop (preserves folder structure)                                 | Uses `ensureDirectory(...)` + uploads                                                 |
-| Create folders                    | ✅                   | "New folder" button                                                                               | `createDirectory(path)`                                                               |
-| Download files                    | ✅                   | Row actions / bulk actions / transfer queue, extension-assisted or proxy fallback                 | `downloadFile(...)`, `downloadFileViaExtension(...)`                                  |
-| Download folders (zip)            | ✅ (single folder)   | Folder "Zip" action downloads selected folder as a `.zip`                                         | Client-side recursive download + zip packaging                                        |
-| Share files                       | ✅                   | Share dialog with copy/regenerate link, expiry guidance, improved shared-file page                | `getAttachmentUrls(path)` + encoded share payload                                     |
-| Delete files/folders              | ✅                   | Safer delete confirmation dialog (typed confirmation), recursive delete supported                 | `deleteFile(path, onProgress)`                                                        |
-| Rename                            | ✅                   | Inline rename, rename dialog, actions menu                                                        | `renameFile(path, newName)`                                                           |
-| Move                              | ✅                   | Move dialog / bulk move / actions menu, destination picker chips, conflict handling (rename/skip) | `moveFile(path, newParentPath)`                                                       |
-| Browse folders                    | ✅                   | Breadcrumbs, folder navigation                                                                    | `getChildren(path)`                                                                   |
-| Search / sort / filter            | ✅                   | Search bar (`ext:` filters), column sort/filter                                                   | UI-driven                                                                             |
-| File icons                        | ✅                   | File type icons in list                                                                           | UI-driven                                                                             |
-| File previews                     | ✅ (supported types) | In-app preview dialog and shared-file preview (images/video/audio/PDF/text, size-limited)         | UI-driven                                                                             |
-| Transfer manager                  | ✅                   | Queue/status/progress/errors/retry for uploads & downloads, extension status indicator            | UI-driven                                                                             |
-| Bulk actions & actions menu       | ✅                   | Multi-select toolbar actions + per-item "More" menu                                               | UI-driven                                                                             |
-| Client-side encryption (optional) | ✅                   | Encryption dialog (enable for new uploads + passphrase), auto-decrypt in-app when configured      | AES-GCM per-chunk encryption before upload; encrypted metadata stored in file content |
-| Responsive/mobile improvements    | ✅ (improved)        | Responsive layout, collapsible navbar, mobile-friendly interactions                               | UI-driven                                                                             |
-| Trash / restore                   | ❌                   | No backend-backed trash; deletion is permanent after confirmation                                 | -                                                                                     |
-| In-app file editor                | ❌                   | -                                                                                                 | Re-upload/overwrite file content is possible                                          |
+| Feature                           | Support              | UI                                                                                                | JavaScript/API notes                                                                                                 |
+| --------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Login using Webhook URL           | ✅                   | Setup page (validates/connects storage)                                                           | `DisboxFileManager.create(webhookUrl)`                                                                               |
+| Upload files                      | ✅                   | Upload files button, multi-file picker, drag & drop, transfer queue                               | `uploadFile(path, file, onProgress)`                                                                                 |
+| Upload folders                    | ✅                   | Upload folder picker and drag & drop (preserves folder structure)                                 | Uses `ensureDirectory(...)` + uploads                                                                                |
+| Create folders                    | ✅                   | "New folder" button                                                                               | `createDirectory(path)`                                                                                              |
+| Download files                    | ✅                   | Row actions / bulk actions / transfer queue, extension-assisted or proxy fallback                 | `downloadFile(...)`, `downloadFileViaExtension(...)`                                                                 |
+| Download folders (zip)            | ✅ (single folder)   | Folder "Zip" action downloads selected folder as a `.zip` (streams to disk when supported)        | Client-side recursive download + streaming ZIP packaging (File System Access API when available, in-memory fallback) |
+| Share files                       | ✅                   | Share dialog with copy/regenerate link, expiry guidance, improved shared-file page                | `getAttachmentUrls(path)` + encoded share payload                                                                    |
+| Delete files/folders              | ✅                   | Safer delete confirmation dialog (typed confirmation), recursive delete supported                 | `deleteFile(path, onProgress)`                                                                                       |
+| Rename                            | ✅                   | Inline rename, rename dialog, actions menu                                                        | `renameFile(path, newName)`                                                                                          |
+| Move                              | ✅                   | Move dialog / bulk move / actions menu, destination picker chips, conflict handling (rename/skip) | `moveFile(path, newParentPath)`                                                                                      |
+| Browse folders                    | ✅                   | Breadcrumbs, folder navigation                                                                    | `getChildren(path)`                                                                                                  |
+| Search / sort / filter            | ✅                   | Search bar (`ext:` filters), column sort/filter                                                   | UI-driven                                                                                                            |
+| File icons                        | ✅                   | File type icons in list                                                                           | UI-driven                                                                                                            |
+| File previews                     | ✅ (supported types) | In-app preview dialog and shared-file preview (images/video/audio/PDF/text, size-limited)         | UI-driven                                                                                                            |
+| Transfer manager                  | ✅                   | Queue/status/progress/errors/retry for uploads & downloads, extension status indicator            | UI-driven                                                                                                            |
+| Bulk actions & actions menu       | ✅                   | Multi-select toolbar actions + per-item "More" menu                                               | UI-driven                                                                                                            |
+| Client-side encryption (optional) | ✅                   | Encryption dialog (enable for new uploads + passphrase), auto-decrypt in-app when configured      | AES-GCM per-chunk encryption before upload; encrypted metadata stored in file content                                |
+| Responsive/mobile improvements    | ✅ (improved)        | Responsive layout, collapsible navbar, mobile-friendly interactions                               | UI-driven                                                                                                            |
+| Trash / restore                   | ❌                   | No backend-backed trash; deletion is permanent after confirmation                                 | -                                                                                                                    |
+| In-app file editor                | ❌                   | -                                                                                                 | Re-upload/overwrite file content is possible                                                                         |
 
 Suggestions and contributions are welcome!
 
@@ -46,7 +46,7 @@ Suggestions and contributions are welcome!
   - Bulk actions, per-item "More" actions menu, improved loading/error/empty states
   - Upload improvements: multi-file upload, folder upload picker, drag-and-drop files/folders with preserved structure
   - Move/rename dialogs, move conflict handling (rename/skip), safer delete confirmation dialog
-  - Folder download as **zip** (single folder), in-app previews for supported file types, improved shared-file page
+  - Folder download as **zip** (single folder), with streaming ZIP-to-disk when supported (File System Access API) and in-memory fallback, in-app previews for supported file types, improved shared-file page
   - Optional **client-side encryption** for new uploads (AES-GCM per-chunk, passphrase-based key derivation) with auto-decrypt in-app when configured
   - Responsive/layout and accessibility improvements
 - **Sharing**
@@ -214,7 +214,7 @@ The web app supports optional client-side encryption for **new uploads**:
 - Discord attachment URLs can expire; if a shared/download link stops working, regenerate the share link or retry the download (the app attempts expired-link recovery in supported flows).
 - Public CORS proxies may fail or be blocked; a browser extension or a trusted/self-hosted proxy is more reliable for downloads.
 - Deletions are permanent after confirmation (no trash/restore).
-- Folder zip download is currently client-side and may be memory-intensive for very large folders/files.
+- Folder zip download supports streaming to disk when the browser supports the File System Access API; otherwise it falls back to an in-memory zip build, which can be memory-intensive for very large folders/files.
 - Keep webhook URLs and encryption passphrases private (they protect access to stored data).
 
 ## License
