@@ -1,0 +1,1 @@
+const e={GONE:["A requested file or directory could not be found at the time an operation was processed.","NotFoundError"],DISALLOWED:["The request is not allowed by the user agent or the platform in the current context.","NotAllowedError"]};export{e};
