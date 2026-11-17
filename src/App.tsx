@@ -260,13 +260,14 @@ function App() {
           let speedBps = t.speedBps;
           let etaSeconds = t.etaSeconds;
           const prevTime = t.progressUpdatedAt || now;
-          const prevBytes =
-            typeof t.bytesTransferred === 'number' ? t.bytesTransferred : bytesTransferred;
+          const prevBytes = typeof t.bytesTransferred === 'number' ? t.bytesTransferred : 0;
           const dt = Math.max(0.001, (now - prevTime) / 1000);
           const dBytes = bytesTransferred - prevBytes;
-          if (dBytes >= 0 && dt > 0.2) {
+          if (dBytes > 0 && dt >= 0.25) {
             const inst = dBytes / dt;
             speedBps = speedBps ? speedBps * 0.7 + inst * 0.3 : inst;
+          } else if (dBytes === 0 && dt > 10 && speedBps) {
+            speedBps = speedBps * 0.8;
           }
           if (safeTotal > 0 && speedBps && speedBps > 0) {
             etaSeconds = Math.max(0, (safeTotal - bytesTransferred) / speedBps);
@@ -438,6 +439,15 @@ function App() {
                     }
                   }
                   if (!completedViaExtension) {
+                    updateTransfer(id, {
+                      progress: -1,
+                      error: '',
+                      bytesTransferred: undefined,
+                      totalBytes: (row.size as number | undefined) || undefined,
+                      speedBps: undefined,
+                      etaSeconds: undefined,
+                      progressUpdatedAt: Date.now(),
+                    });
                     const writable = await pickLocationAsWritable(row.name);
                     await fileManager.downloadFile(
                       row.path as string,
