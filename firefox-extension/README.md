@@ -2,7 +2,7 @@
 
 This folder contains a **separate Firefox WebExtension** that helps the Disbox web app download Discord attachment files by fetching them from the extension context (bypassing page CORS restrictions). It is isolated from the main web app code.
 
-> This is an experimental/local extension implementation for Firefox. It is **not** the same as the published Chrome extension and uses a different extension ID. If you submit/publish a separate public AMO listing, use a unique Gecko extension ID for that listing.
+> This is a local/dev Firefox WebExtension for the Disbox web app. It includes support for the fork’s deployed site (`https://fl-of.github.io/*`) so it can be used right away as a temporary add-on while waiting for AMO approval of a signed/listed build. If you submit/publish a separate public AMO listing, use a unique Gecko extension ID for that listing.
 
 ## What it does
 
@@ -18,31 +18,37 @@ This folder contains a **separate Firefox WebExtension** that helps the Disbox w
 - `content-script.js` – page bridge (window.postMessage) for reliable communication from the web app
 - `icons/` – extension icons
 
-## Load temporarily in Firefox (for testing)
+## Use right away (temporary load in Firefox)
 
 1. Open Firefox and go to `about:debugging#/runtime/this-firefox`
 2. Click **Load Temporary Add-on...**
-3. Select `firefox-extension/manifest.json` from this repository
-4. The extension will be loaded until Firefox is closed
+3. Select `firefox-extension/manifest.json` from this folder
+4. Open the Disbox web app and hard-refresh the page:
+   - **Hosted site:** https://fl-of.github.io/disbox_fork/web/
+   - **Local dev:** your localhost URL if running locally
+5. The app should detect the extension and use it for downloads (when supported)
 
-## Important: web app integration / extension ID
+**Notes**
+- Temporary add-ons are removed when Firefox closes (standard Firefox behavior). You’ll need to load it again after restarting Firefox.
+- This folder is already configured for the fork site (`https://fl-of.github.io/*`) and uses extension ID `disbox-downloader-public@example.local` (matching the deployed site’s configured IDs). No web app rebuild is required for the hosted site.
 
-The current Disbox web app code has the **Chrome extension ID hardcoded** (`jklpfhklkhbfgeencifbmkoiaokeieah`) and only messages that specific ID. Because Firefox extensions have different IDs, this local Firefox extension will **not** be used automatically by the current web app unless the app is updated to:
+## Web app integration / extension ID
 
-- send messages to this extension’s ID, or
-- detect/support a configurable extension ID
+The extension uses Gecko ID `disbox-downloader-public@example.local` (see `manifest.json`). The deployed fork website build is configured to try compatible extension IDs (including this one), so it should work on **https://fl-of.github.io/disbox_fork/web/** once this extension is loaded.
 
-This folder provides the Firefox extension implementation without changing the original web app behavior.
-
-### Temporary local testing tip
-
-For local experiments, configure the web app with the extension ID from `manifest.json` via `.env` (recommended) instead of hardcoding code changes:
+For local/custom builds, configure the web app with the extension ID from `manifest.json` via `.env` if needed:
 
 ```env
 VITE_DISBOX_EXTENSION_ID=disbox-downloader-public@example.local
 ```
 
-Then restart/rebuild the web app. If you need to support multiple extension IDs during migration/testing, use `VITE_DISBOX_EXTENSION_IDS` with a comma-separated list. Avoid committing temporary hardcoded ID changes if you want to keep other browser/extension behavior unchanged.
+Or support multiple IDs during migration/testing:
+
+```env
+VITE_DISBOX_EXTENSION_IDS=disbox-downloader-public@example.local,disbox-downloader@example.local,jklpfhklkhbfgeencifbmkoiaokeieah
+```
+
+Then restart/rebuild the web app. For the already-deployed fork site, no rebuild is needed.
 
 ## Permissions
 
