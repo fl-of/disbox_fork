@@ -140,18 +140,23 @@ export default function TransferManager({
                         />
                       )}
                       {t.status === 'running' && (
-                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.25 }}>
-                          {t.progress >= 0 && (
-                            <Typography variant="caption" color="text.secondary">
-                              {t.progress}%
-                            </Typography>
-                          )}
-                          {t.progress >= 0 && formatDuration(t.etaSeconds) && (
-                            <Typography variant="caption" color="text.secondary">
-                              • {formatDuration(t.etaSeconds)}
-                            </Typography>
-                          )}
-                          {t.progress < 0 && (
+                        <Stack
+                          direction="row"
+                          spacing={1}
+                          alignItems="center"
+                          flexWrap="wrap"
+                          sx={{ mt: 0.25 }}
+                        >
+                          {t.progress >= 0 ? (
+                            <>
+                              <Typography variant="caption" color="text.secondary">
+                                {t.progress}%
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                • {formatDuration(t.etaSeconds) || 'Calculating time remaining...'}
+                              </Typography>
+                            </>
+                          ) : (
                             <Typography variant="caption" color="text.secondary">
                               Calculating time remaining...
                             </Typography>
