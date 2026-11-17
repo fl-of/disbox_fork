@@ -414,15 +414,28 @@ function App() {
                   if (extensionStatus.canDirectDownload) {
                     try {
                       updateTransfer(id, {
-                        progress: -1,
+                        progress: row.size && Number(row.size) > 0 ? 0 : -1,
                         error: '',
-                        bytesTransferred: undefined,
+                        bytesTransferred: 0,
                         totalBytes: (row.size as number | undefined) || undefined,
                         speedBps: undefined,
                         etaSeconds: undefined,
                         progressUpdatedAt: Date.now(),
                       });
-                      const ok = await fileManager.downloadFileViaExtension(row.path as string);
+                      const ok = await fileManager.downloadFileViaExtension(
+                        row.path as string,
+                        (value: number, total: number) => {
+                          if (total > 0) {
+                            updateTransferProgress(id, value, total);
+                          } else if (value > 0) {
+                            updateTransfer(id, {
+                              bytesTransferred: value,
+                              progress: -1,
+                              progressUpdatedAt: Date.now(),
+                            });
+                          }
+                        },
+                      );
                       if (ok) {
                         completedViaExtension = true;
                       } else {

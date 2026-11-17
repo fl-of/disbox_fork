@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Disbox Downloader for Firefox",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Helps the Disbox web app download files from Discord by fetching attachment URLs from the extension context (bypassing page CORS restrictions).",
   "permissions": [
     "downloads",

@@ -11,6 +11,7 @@
     const requestId = data.requestId;
     try {
       const response = await runtimeApi.sendMessage({
+        requestId,
         message: data.message || data.payload || {},
       });
       window.postMessage(
@@ -34,4 +35,19 @@
       );
     }
   });
+
+  if (runtimeApi && runtimeApi.onMessage) {
+    runtimeApi.onMessage.addListener((message) => {
+      if (!message || message.type !== 'DISBOX_FETCH_PROGRESS' || !message.requestId) return;
+      window.postMessage(
+        {
+          source: SOURCE_EXTENSION,
+          type: 'DISBOX_FETCH_PROGRESS',
+          requestId: message.requestId,
+          progress: message.progress || {},
+        },
+        '*',
+      );
+    });
+  }
 })();

@@ -146,7 +146,18 @@ async function sendMessageToExtension(
   }
 }
 
-async function sendToExtension(payload: any, timeoutMs = 30000): Promise<any | null> {
+async function sendToExtension(
+  payload: any,
+  timeoutMs = 30000,
+  onProgress?:
+    | ((progress: {
+        bytesDownloaded?: number;
+        totalBytes?: number;
+        chunksCompleted?: number;
+        totalChunks?: number;
+      }) => void)
+    | null,
+): Promise<any | null> {
   // Preferred path for Firefox/local extension: content-script bridge via window.postMessage.
   if (typeof window !== 'undefined') {
     const bridged = await new Promise<any | null>((resolve) => {
@@ -154,7 +165,7 @@ async function sendToExtension(payload: any, timeoutMs = 30000): Promise<any | n
       let settled = false;
       const cleanup = () => {
         window.removeEventListener('message', onMessage);
-        clearTimeout(timeout);
+        clearTimeout(timeoutHandle);
       };
       const finish = (value: any | null) => {
         if (settled) return;
@@ -165,12 +176,21 @@ async function sendToExtension(payload: any, timeoutMs = 30000): Promise<any | n
       const onMessage = (event: MessageEvent) => {
         if (event.source !== window) return;
         const data: any = event.data;
-        if (!data || data.source !== 'disbox-extension' || data.type !== 'DISBOX_FETCH_RESPONSE')
+        if (!data || data.source !== 'disbox-extension' || data.requestId !== requestId) return;
+
+        if (data.type === 'DISBOX_FETCH_PROGRESS') {
+          try {
+            onProgress?.(data.progress || {});
+          } catch {
+            // ignore progress callback errors
+          }
           return;
-        if (data.requestId !== requestId) return;
+        }
+
+        if (data.type !== 'DISBOX_FETCH_RESPONSE') return;
         finish(data.response ?? null);
       };
-      const timeout = setTimeout(() => finish(null), timeoutMs);
+      const timeoutHandle = setTimeout(() => finish(null), timeoutMs);
       window.addEventListener('message', onMessage);
       window.postMessage(
         { source: 'disbox-page', type: 'DISBOX_FETCH', requestId, message: payload },
@@ -214,10 +234,26 @@ async function fetchUrlFromExtension(url: string): Promise<string | null> {
   return null;
 }
 
-async function downloadViaExtension(filename: string, urls: string[]): Promise<boolean> {
+async function downloadViaExtension(
+  filename: string,
+  urls: string[],
+  onProgress?: ProgressCallback,
+  totalBytes?: number,
+): Promise<boolean> {
   const response = await sendToExtension(
-    { action: 'download', filename, urls },
+    { action: 'download', filename, urls, totalBytes },
     Math.max(30000, urls.length * 30000),
+    (progress) => {
+      if (!onProgress) return;
+      const bytes = Number(progress?.bytesDownloaded) || 0;
+      const total = Number(progress?.totalBytes) || Number(totalBytes) || 0;
+      if (total > 0) {
+        onProgress(bytes, total);
+      } else if (bytes > 0) {
+        // Fallback: provide indeterminate-ish progress info via bytes only.
+        onProgress(bytes, -1);
+      }
+    },
   );
   return Boolean(response && (response.ok || response.downloadId));
 }
@@ -696,14 +732,16 @@ class DiscordFileStorage {
     messageIds: Array<string | number>,
     filename: string,
     isEncrypted = false,
+    onProgress?: ProgressCallback,
+    totalBytes?: number,
   ): Promise<boolean> {
     if (isEncrypted) return false;
     let attachmentUrls = await this.getAttachmentUrls(messageIds);
-    let ok = await downloadViaExtension(filename, attachmentUrls);
+    let ok = await downloadViaExtension(filename, attachmentUrls, onProgress, totalBytes);
     if (ok) return true;
     // Retry once with fresh URLs if the extension path failed (possibly expired links).
     attachmentUrls = await this.getAttachmentUrls(messageIds);
-    ok = await downloadViaExtension(filename, attachmentUrls);
+    ok = await downloadViaExtension(filename, attachmentUrls, onProgress, totalBytes);
     return ok;
   }
 
@@ -1239,7 +1277,7 @@ class DisboxFileManager {
     }
   }
 
-  async downloadFileViaExtension(path: string): Promise<boolean> {
+  async downloadFileViaExtension(path: string, onProgress?: ProgressCallback): Promise<boolean> {
     const file = this.getFile(path);
     if (!file) {
       throw new Error(`File not found: ${path}`);
@@ -1250,7 +1288,13 @@ class DisboxFileManager {
     const refs = parseContentReferences(file);
     if (refs.enc) return false;
     try {
-      return await this.discordFileStorage.downloadToExtension(refs.ids, file.name, false);
+      return await this.discordFileStorage.downloadToExtension(
+        refs.ids,
+        file.name,
+        false,
+        onProgress,
+        file.size || -1,
+      );
     } catch {
       return false;
     }
