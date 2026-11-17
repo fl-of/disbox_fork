@@ -24,6 +24,18 @@ interface Props {
   onClearCompleted: () => void;
 }
 
+function formatDuration(seconds?: number): string | null {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return null;
+  const s = Math.round(seconds);
+  if (s < 5) return 'a few seconds';
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m left`;
+  if (m > 0) return `${m}m ${sec}s left`;
+  return `${sec}s left`;
+}
+
 export default function TransferManager({
   open,
   onClose,
@@ -123,14 +135,28 @@ export default function TransferManager({
                       {(t.status === 'running' || t.status === 'queued') && (
                         <LinearProgress
                           variant={t.progress >= 0 ? 'determinate' : 'indeterminate'}
-                          value={t.progress}
+                          value={t.progress >= 0 ? t.progress : undefined}
                           sx={{ mt: 0.5 }}
                         />
                       )}
-                      {t.status === 'running' && t.progress >= 0 && (
-                        <Typography variant="caption" color="text.secondary">
-                          {t.progress}%
-                        </Typography>
+                      {t.status === 'running' && (
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.25 }}>
+                          {t.progress >= 0 && (
+                            <Typography variant="caption" color="text.secondary">
+                              {t.progress}%
+                            </Typography>
+                          )}
+                          {t.progress >= 0 && formatDuration(t.etaSeconds) && (
+                            <Typography variant="caption" color="text.secondary">
+                              • {formatDuration(t.etaSeconds)}
+                            </Typography>
+                          )}
+                          {t.progress < 0 && (
+                            <Typography variant="caption" color="text.secondary">
+                              Calculating time remaining...
+                            </Typography>
+                          )}
+                        </Stack>
                       )}
                       {t.error && (
                         <Typography variant="caption" color="error" display="block">

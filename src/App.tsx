@@ -245,6 +245,50 @@ function App() {
     setTransfers((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   }, []);
 
+  const updateTransferProgress = useCallback(
+    (id: string, bytesTransferred: number, totalBytes: number) => {
+      const now = Date.now();
+      setTransfers((prev) =>
+        prev.map((t) => {
+          if (t.id !== id) return t;
+          const safeTotal = totalBytes > 0 ? totalBytes : t.totalBytes || 0;
+          const progress =
+            safeTotal > 0
+              ? Math.max(0, Math.min(100, Math.round((bytesTransferred / safeTotal) * 100)))
+              : -1;
+
+          let speedBps = t.speedBps;
+          let etaSeconds = t.etaSeconds;
+          const prevTime = t.progressUpdatedAt || now;
+          const prevBytes =
+            typeof t.bytesTransferred === 'number' ? t.bytesTransferred : bytesTransferred;
+          const dt = Math.max(0.001, (now - prevTime) / 1000);
+          const dBytes = bytesTransferred - prevBytes;
+          if (dBytes >= 0 && dt > 0.2) {
+            const inst = dBytes / dt;
+            speedBps = speedBps ? speedBps * 0.7 + inst * 0.3 : inst;
+          }
+          if (safeTotal > 0 && speedBps && speedBps > 0) {
+            etaSeconds = Math.max(0, (safeTotal - bytesTransferred) / speedBps);
+          } else {
+            etaSeconds = undefined;
+          }
+
+          return {
+            ...t,
+            progress,
+            bytesTransferred,
+            totalBytes: safeTotal || undefined,
+            speedBps,
+            etaSeconds,
+            progressUpdatedAt: now,
+          };
+        }),
+      );
+    },
+    [],
+  );
+
   const enqueueTransfers = useCallback(
     (items: Omit<TransferItem, 'id' | 'status' | 'progress' | 'error'>[]) => {
       const withIds: TransferItem[] = items.map((item) => ({
@@ -277,10 +321,26 @@ function App() {
               return prev;
             }
             void (async () => {
+              const initialUploadBytes =
+                t.type === 'upload' ? (t.payload as any)?.resume?.uploadedBytes || 0 : 0;
+              const initialTotalBytes =
+                t.type === 'upload'
+                  ? ((t.payload as any)?.file?.size as number | undefined)
+                  : ((t.payload as any)?.row?.size as number | undefined);
               updateTransfer(id, {
                 status: 'running',
-                progress: t.progress >= 0 ? t.progress : 0,
+                progress:
+                  initialTotalBytes && initialTotalBytes > 0
+                    ? Math.round((initialUploadBytes / initialTotalBytes) * 100)
+                    : t.progress >= 0
+                      ? t.progress
+                      : 0,
                 error: '',
+                bytesTransferred: initialUploadBytes || undefined,
+                totalBytes: initialTotalBytes || undefined,
+                etaSeconds: undefined,
+                speedBps: undefined,
+                progressUpdatedAt: Date.now(),
               });
               try {
                 if (t.type === 'upload') {
@@ -296,9 +356,7 @@ function App() {
                     targetPath,
                     file,
                     (value: number, total: number) => {
-                      updateTransfer(id, {
-                        progress: total > 0 ? Math.round((value / total) * 100) : 0,
-                      });
+                      updateTransferProgress(id, value, total);
                     },
                     {
                       ...(payload.encrypted && encryptionPassphrase
@@ -311,6 +369,7 @@ function App() {
                     },
                   );
                   if ((result as any).status === 'paused') {
+                    const resume = (result as any).resume;
                     setTransfers((prev2) =>
                       prev2.map((x) =>
                         x.id === id
@@ -318,13 +377,26 @@ function App() {
                               ...x,
                               status: 'paused',
                               error: '',
-                              payload: { ...x.payload, resume: (result as any).resume },
+                              bytesTransferred: resume?.uploadedBytes ?? x.bytesTransferred,
+                              totalBytes:
+                                (payload.file?.size as number | undefined) ?? x.totalBytes,
+                              speedBps: undefined,
+                              etaSeconds: undefined,
+                              progressUpdatedAt: Date.now(),
+                              payload: { ...x.payload, resume },
                             }
                           : x,
                       ),
                     );
                   } else {
-                    updateTransfer(id, { status: 'completed', progress: 100 });
+                    updateTransfer(id, {
+                      status: 'completed',
+                      progress: 100,
+                      bytesTransferred: file.size,
+                      totalBytes: file.size,
+                      speedBps: undefined,
+                      etaSeconds: 0,
+                    });
                     setTransfers((prev2) =>
                       prev2.map((x) =>
                         x.id === id ? { ...x, payload: { ...x.payload, resume: null } } : x,
@@ -340,7 +412,15 @@ function App() {
                   let completedViaExtension = false;
                   if (extensionStatus.canDirectDownload) {
                     try {
-                      updateTransfer(id, { progress: -1, error: '' });
+                      updateTransfer(id, {
+                        progress: -1,
+                        error: '',
+                        bytesTransferred: undefined,
+                        totalBytes: (row.size as number | undefined) || undefined,
+                        speedBps: undefined,
+                        etaSeconds: undefined,
+                        progressUpdatedAt: Date.now(),
+                      });
                       const ok = await fileManager.downloadFileViaExtension(row.path as string);
                       if (ok) {
                         completedViaExtension = true;
@@ -363,14 +443,19 @@ function App() {
                       row.path as string,
                       writable,
                       (value: number, total: number) => {
-                        updateTransfer(id, {
-                          progress: total > 0 ? Math.round((value / total) * 100) : 0,
-                        });
+                        updateTransferProgress(id, value, total);
                       },
                       encryptionPassphrase ? { passphrase: encryptionPassphrase } : undefined,
                     );
                   }
-                  updateTransfer(id, { status: 'completed', progress: 100 });
+                  updateTransfer(id, {
+                    status: 'completed',
+                    progress: 100,
+                    bytesTransferred: (row.size as number | undefined) || undefined,
+                    totalBytes: (row.size as number | undefined) || undefined,
+                    speedBps: undefined,
+                    etaSeconds: 0,
+                  });
                 } else {
                   throw new Error('Unknown transfer type');
                 }
@@ -387,7 +472,13 @@ function App() {
             })();
             return prev.map((x) =>
               x.id === id
-                ? { ...x, status: 'running', progress: x.progress >= 0 ? x.progress : 0, error: '' }
+                ? {
+                    ...x,
+                    status: 'running',
+                    progress: x.progress >= 0 ? x.progress : 0,
+                    error: '',
+                    progressUpdatedAt: x.progressUpdatedAt || Date.now(),
+                  }
                 : x,
             );
           });
@@ -403,6 +494,7 @@ function App() {
       path,
       refreshCurrentView,
       updateTransfer,
+      updateTransferProgress,
     ],
   );
 

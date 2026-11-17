@@ -18,6 +18,16 @@ export interface TransferItem {
   progress: number;
   error: string;
   payload: any;
+  /** Bytes transferred so far (best effort). */
+  bytesTransferred?: number;
+  /** Total bytes if known. */
+  totalBytes?: number;
+  /** Smoothed transfer speed in bytes/sec (best effort). */
+  speedBps?: number;
+  /** Estimated seconds remaining (best effort). */
+  etaSeconds?: number;
+  /** Timestamp (ms) used for speed/ETA calculation. */
+  progressUpdatedAt?: number;
 }
 
 export interface SnackbarState {
