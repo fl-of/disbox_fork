@@ -63,7 +63,7 @@ Suggestions and contributions are welcome!
   - Content-script bridge for reliable page↔extension messaging
   - Direct download support via browser Downloads API (preferred, avoids page CORS/data URL handoff to page)
   - Legacy fetch-to-data-URL fallback path retained for compatibility
-  - Updated manifest/permissions and versioning for AMO validation (prepared public/listed package with ID `disbox-downloader-public@example.local`; repo manifest now targets `0.1.4` with fork GitHub Pages origin support — submit/update on AMO for the deployed site)
+  - Published AMO listing available: [Disbox Downloader for Firefox](https://addons.mozilla.org/en-US/firefox/addon/disbox-downloader-for-firefox/); repo manifest currently targets `0.1.5` (fork GitHub Pages origin support + download progress reporting for ETA)
 - **Testing/docs**
   - Added Vitest-based unit tests for utility/share logic and `docs/QA_CHECKLIST.md` for manual cross-browser QA
 
@@ -172,27 +172,31 @@ Create a `.env` file in the project root to configure build-time variables:
 
 A Firefox extension implementation is available in `firefox-extension/` to assist with downloads by fetching Discord attachment URLs from the extension context (bypassing page CORS restrictions).
 
-- **Download/install:** [Firefox Add-ons (AMO)](https://addons.mozilla.org/) — search for **“Disbox Downloader for Firefox”** (or use the signed AMO build if you already have the listing link). For local/testing, you can also load the unpacked extension from `firefox-extension/`.
+- **Download/install (recommended):** [Disbox Downloader for Firefox on AMO](https://addons.mozilla.org/en-US/firefox/addon/disbox-downloader-for-firefox/) (signed/listed build). For local development/testing, you can also load the unpacked extension from `firefox-extension/`.
 - **Source/location:** `firefox-extension/` (manifest, background script, content-script bridge, icons)
-- **Extension ID:** `disbox-downloader-public@example.local` (as configured in this repo’s Firefox extension manifest/package for public listing)
-- **Capabilities:** direct download via browser Downloads API (preferred), capability detection/ping, and legacy fetch fallback path
+- **Extension ID:** `disbox-downloader-public@example.local` (as configured in this repo’s Firefox extension manifest/package)
+- **Capabilities:** direct download via browser Downloads API (preferred), capability detection/ping, download progress reporting to the web app (for transfer ETA), and legacy fetch fallback path
 - **Allowed origins (content-script bridge):** `https://fl-of.github.io/*`, `https://disboxapp.github.io/*`, `http://localhost/*`, `http://127.0.0.1/*`, `https://localhost/*`, `https://127.0.0.1/*`
-- **Temporary/local load:** `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on...** → `firefox-extension/manifest.json`
-- **Current packaged manifest version in repo:** `0.1.4` (includes fork GitHub Pages origin support for the content-script bridge; submit/update on AMO for website use)
+- **Temporary/local load (dev):** `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on...** → `firefox-extension/manifest.json`
+- **Current packaged manifest version in repo:** `0.1.5` (includes fork GitHub Pages origin support and download progress reporting for transfer ETA)
 
 ### Using the Firefox extension with this web app
 
-The web app must be configured to message the extension ID, and the build must include that configuration:
+1. **Recommended:** install the signed extension from [AMO](https://addons.mozilla.org/en-US/firefox/addon/disbox-downloader-for-firefox/)
+2. Open the Disbox web app on an allowed origin (e.g. `https://fl-of.github.io/disbox_fork/web/`, `http://localhost:5173/`, or another supported origin)
+3. Refresh the page after installing/updating the extension so the content-script bridge and progress reporting are detected
 
-1. Install/load the Firefox extension (temporary or signed `.xpi`)
-2. Set in `.env`:
-   ```env
-   VITE_DISBOX_EXTENSION_ID=disbox-downloader-public@example.local
-   ```
-3. Restart/rebuild the web app (`npm run dev`, or `npm run build` / `npm run preview:prod`)
-4. Open the app on an allowed origin (e.g. `http://localhost:5173/`)
+**For local development/custom builds:** ensure the web app is configured with a matching extension ID (the deployed fork site is already configured):
 
-> Note: Installing the extension in Firefox is separate from the website code. A deployed site (e.g. `https://disboxapp.github.io/web`) will only use this Firefox extension if that deployed build is configured with the matching extension ID.
+```env
+VITE_DISBOX_EXTENSION_ID=disbox-downloader-public@example.local
+# or
+VITE_DISBOX_EXTENSION_IDS=disbox-downloader-public@example.local,disbox-downloader@example.local,jklpfhklkhbfgeencifbmkoiaokeieah
+```
+
+Then restart/rebuild the web app (`npm run dev`, or `npm run build` / `npm run preview:prod`).
+
+> Note: Installing the extension in Firefox is separate from the website code. A deployed site will only use a given Firefox extension build if that deployed web app is configured to try its extension ID. You can still load the unpacked extension from `firefox-extension/` for development/testing via `about:debugging#/runtime/this-firefox`.
 
 See `firefox-extension/README.md` for details/limitations and `docs/QA_CHECKLIST.md` for manual validation scenarios.
 

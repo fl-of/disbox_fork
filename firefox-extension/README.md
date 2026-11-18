@@ -2,7 +2,7 @@
 
 This folder contains a **separate Firefox WebExtension** that helps the Disbox web app download Discord attachment files by fetching them from the extension context (bypassing page CORS restrictions). It is isolated from the main web app code.
 
-> This is a local/dev Firefox WebExtension for the Disbox web app. It includes support for the fork’s deployed site (`https://fl-of.github.io/*`) so it can be used right away as a temporary add-on while waiting for AMO approval of a signed/listed build. If you submit/publish a separate public AMO listing, use a unique Gecko extension ID for that listing.
+> The published/signed version is available on AMO: **[Disbox Downloader for Firefox](https://addons.mozilla.org/en-US/firefox/addon/disbox-downloader-for-firefox/)**. This folder contains the extension source used for development and AMO updates (currently `v0.1.5`), including support for the fork’s deployed site (`https://fl-of.github.io/*`) and download progress reporting for the web app’s transfer ETA. If you submit/publish a separate public AMO listing, use a unique Gecko extension ID for that listing.
 
 ## What it does
 
@@ -18,7 +18,13 @@ This folder contains a **separate Firefox WebExtension** that helps the Disbox w
 - `content-script.js` – page bridge (window.postMessage) for reliable communication from the web app
 - `icons/` – extension icons
 
-## Use right away (temporary load in Firefox)
+## Install (recommended)
+
+Install the signed extension from AMO: **https://addons.mozilla.org/en-US/firefox/addon/disbox-downloader-for-firefox/**
+
+After installing or updating, refresh the Disbox web app page so the updated content-script bridge and progress reporting are detected.
+
+## Local development / temporary load (unpacked)
 
 1. Open Firefox and go to `about:debugging#/runtime/this-firefox`
 2. Click **Load Temporary Add-on...**
@@ -29,8 +35,10 @@ This folder contains a **separate Firefox WebExtension** that helps the Disbox w
 5. The app should detect the extension and use it for downloads (when supported)
 
 **Notes**
+
 - Temporary add-ons are removed when Firefox closes (standard Firefox behavior). You’ll need to load it again after restarting Firefox.
 - This folder is already configured for the fork site (`https://fl-of.github.io/*`) and uses extension ID `disbox-downloader-public@example.local` (matching the deployed site’s configured IDs). No web app rebuild is required for the hosted site.
+- Repo manifest version: `0.1.5` (includes fork site support and download progress reporting). Bump the version for future AMO submissions as required.
 
 ## Web app integration / extension ID
 
